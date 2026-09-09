@@ -124,6 +124,29 @@ Next measure actual document jobs, one at a time:
 ./venv/bin/python scripts/benchmark_local_llm.py --document experiments/fixtures/pi-long-report.txt
 ```
 
+If these commands report `unresolved_tool_request` with no child process, Needle
+stopped the request before model startup. This is not a measurement of SmolLM2.
+To isolate the native model runtime, explicitly select the direct-tool benchmark:
+
+```sh
+./venv/bin/python scripts/benchmark_local_llm.py --direct-tool --document experiments/fixtures/sample-summary.txt
+./venv/bin/python scripts/benchmark_local_llm.py --direct-tool --document experiments/fixtures/pi-long-report.txt
+```
+
+Direct mode runs the real `summarize_file` tool but does not import Needle.
+Its RAM total therefore excludes Needle and is not the full interactive-agent
+footprint. Both benchmark modes permit only summarizing the specified file;
+an unrelated proposed tool or file is blocked. `generation_outcome` distinguishes
+routing refusal, document failure, extractive fallback and completed model output.
+`model_process_observed` records sampled worker presence, not successful loading
+or completion by itself. A missing runtime can still produce an extractive result.
+
+Routed mode includes `routing_diagnostics.model_input` and `raw_model_result`.
+Compare those fields with the evaluator's stored model inputs if a case passes
+in a sequence but fails in a fresh process. Do not infer that the runtime or
+model file is broken from a low routing confidence alone. These diagnostics can
+contain request details; keep saved reports local.
+
 The long fixture is a fictional English workshop review with facts spread across
 the beginning, middle and end. Check whether the result retains the decision
 to reopen ten of twelve machines, keep two unavailable until repair and another

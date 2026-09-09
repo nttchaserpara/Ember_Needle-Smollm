@@ -22,5 +22,7 @@
   {"query":"Add a task to buy milk","expected":{"name":"add_task","arguments":{"title":"buy milk"}}},
   {"query":"Summarize \"D:\\report.txt\"","expected":{"name":"summarize_file","arguments":{"path":"D:\\report.txt"}}},
   {"query":"Show my pending tasks","expected":{"name":"list_tasks","arguments":{"show_all":false}}},
-  {"query":"Please open calculator","expected":{"name":"launch_app","arguments":{"app_name":"calculator"}}}
+  {"query":"Please open calculator","expected":{"name":"launch_app","arguments":{"app_name":"calculator"}}},
+  {"query":"Summarize \"/home/example/Ember/experiments/fixtures/sample-summary.txt\"","expected":{"name":"summarize_file","arguments":{"path":"/home/example/Ember/experiments/fixtures/sample-summary.txt"}}},
+  {"query":"Do not summarize \"/home/example/Ember/experiments/fixtures/sample-summary.txt\"","expected":null}
 ]

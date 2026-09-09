@@ -584,7 +584,7 @@ def _known_intent_call(query: str) -> dict | None:
     # A path plus an explicit "summarize" verb is already a complete,
     # unambiguous local-file request. Needle's small router model scores this
     # combination poorly (especially with spaces in the path), so preserve
-    # the exact path and bypass confidence scoring for this narrow shape.
+    # the exact path for aliasing. Execution still requires model validation.
     # Handles both a quoted path ("...") and a bare absolute Windows path
     # (unambiguous on its own since it starts with a drive letter).
     summary_match = re.search(
@@ -663,7 +663,7 @@ def _execute_call(call: dict, tool_registry, confidence: float | None = None) ->
     return result
 
 
-def route_and_execute(query: str, tool_registry):
+def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = None):
     """
     Route query lewat Needle. Kalau match & confident -> eksekusi beneran
     lewat ToolRegistry asli EmberOS. Kalau tidak ada tool yang cocok ->
@@ -685,6 +685,8 @@ def route_and_execute(query: str, tool_registry):
             path_alias = alias
     needle_agent.reset()
     result = needle_agent.complete(model_query)
+    if diagnostics is not None:
+        diagnostics.update(model_input=model_query, raw_model_result=result)
 
     def unresolved(message, reason):
         return {"route": "unresolved_tool_request", "needle_confidence": result.get("confidence"),
@@ -717,6 +719,7 @@ def route_and_execute(query: str, tool_registry):
             "route": "unresolved_tool_request",
             "needle_confidence": result["confidence"],
             "needle_reasoning": result.get("reasoning"),
+            "reason": "low_confidence",
             "response": (
                 "I couldn't reliably identify the right system action. "
                 "Please rephrase the request with the device feature or folder name."

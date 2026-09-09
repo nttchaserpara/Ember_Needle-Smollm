@@ -3,6 +3,7 @@
 import argparse
 import inspect
 import json
+import platform
 from pathlib import Path
 import sys
 import time
@@ -56,14 +57,20 @@ def main():
                         "model_inputs": model_inputs, "raw_model_results": raw_results,
                         "elapsed_seconds": round(time.perf_counter()-started, 3)})
         print(f"{'PASS' if passed else 'FAIL'} {case['query']}", flush=True)
-    report = {"needle_version": needle.__version__, "confidence_threshold": needle_router.CONFIDENCE_THRESHOLD,
+    report = {"needle_version": needle.__version__, "platform": platform.platform(),
+              "python_version": platform.python_version(),
+              "confidence_threshold": needle_router.CONFIDENCE_THRESHOLD,
               "ordered_schemas": [tool._needle_tool for tool in needle_router.ALL_TOOLS],
               "passed": sum(row["passed"] for row in results), "total": len(results),
               "unexpected_actions": sum(row["expected"] is None and bool(row["calls"]) for row in results),
+              "failed_valid_requests": sum(row["expected"] is not None and not row["passed"] for row in results),
               "results": results}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(f"{report['passed']}/{report['total']} matched expectations; {report['unexpected_actions']} unexpected actions. Report: {args.output}")
+    print(f"{report['passed']}/{report['total']} matched expectations; "
+          f"{report['unexpected_actions']} unexpected proposed actions; "
+          f"{report['failed_valid_requests']} failed valid requests. "
+          f"No real tools executed. Report: {args.output}")
 
 
 if __name__ == "__main__":
