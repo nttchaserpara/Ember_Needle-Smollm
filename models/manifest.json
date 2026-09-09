@@ -1,0 +1,10 @@
+{
+  "filename": "SmolLM2-135M-Instruct-Q4_K_M.gguf",
+  "repository": "bartowski/SmolLM2-135M-Instruct-GGUF",
+  "revision": "09816acd5d99df7be770d85ea30822623dab342c",
+  "size": 105454432,
+  "sha256": "2e8040ceae7815abe0dcb3540b9995eaa1fa0d2ca9e797d0a635ae4433c68c2d",
+  "llama_cpp_version": "b7898",
+  "windows_archive": "llama-b7898-bin-win-cpu-x64.zip",
+  "windows_sha256": "877d96897beae5c3866076c2c0bc4de3d6aa8d1d040f9ab8a03bbe6013b32e55"
+}

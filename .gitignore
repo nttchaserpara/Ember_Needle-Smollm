@@ -1,0 +1,20 @@
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+logs/
+data/
+tools.idx
+models/*.gguf
+models/*.part
+runtimes/
+*.egg-info/
+.local/
+
+# Local development tests and recorded evaluation reports.
+# Keep small input fixtures and routing cases for on-device benchmarks.
+/experiments/*.py
+/experiments/results/
+
+# Unused legacy copy; the active launcher is use_cases/app_launcher.py.
+/app_launcher.py

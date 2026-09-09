@@ -1,0 +1,3 @@
+# Minimal OS-agent and native local-summary runtime. No PyTorch/Transformers.
+psutil>=5.9,<8
+cactus-needle==2.0.11
