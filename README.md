@@ -62,14 +62,56 @@ EMBER_MEMORY=0 ./venv/bin/python run_ember.py
 In PowerShell, set `$env:EMBER_MEMORY = '0'` before running Ember; remove the
 variable with `Remove-Item Env:EMBER_MEMORY` to enable memory on the next launch.
 
-Needle also has a read-only `search_conversation_history` tool for natural
-language history requests. Tool selection remains subject to routing confidence
-and validation; use `/memory search <topic>` to test storage independently.
-Natural-language recall is still inconsistent in local evaluations, including
-false refusals on valid history requests; the explicit CLI commands are available
-regardless of those routing failures.
+Each input is a fresh request. The experimental numbered memory menus and
+pending-answer state have been removed. Device-information tools do not request
+a conversation-versus-RAM choice. An unresolved request does not capture the
+next message as a search topic.
+
+With memory enabled, a small Needle selection view checks for conversation
+recall. It can prevent a conflicting live action but cannot execute tools or
+turn the full question into a search query. The main Needle router must select
+the history tool and generate valid arguments at the existing confidence
+threshold. A disagreement or uncertain result returns an unresolved status
+without opening a menu. Both views use the existing engine and weights.
+
+Natural-language history and time interpretation remain unreliable. Removing
+the menus restores independent input handling; it does not solve semantic
+retrieval. Use `/memory` and `/memory search <topic>` for direct access to the
+stored history while model-based conversation handling is evaluated separately.
+
+Lookup is literal: every topic word must match a whole word in a saved request,
+answer, or arguments. Matching results precede failed attempts, with duplicate
+excerpts suppressed. Failed response text is excluded from matching; failures
+remain searchable by their request/arguments and retain their original status.
+A no-match result never falls back to unrelated recent history. However, pasted
+tracebacks stored as user requests can still match a word in a directory name.
+Such a match is not evidence of a meaningful discussion about that subject.
+
+The backend supports all, current, and previous saved sessions. The previous
+session is the latest earlier session containing retained non-recall turns,
+not necessarily yesterday or the latest discussion of a particular topic.
+Session filtering happens before ranking; the old UI no longer selects it.
+
+LLM-generated clarification questions and brief tool responses are planned
+work. Measure correctness, latency and total RAM on the 512 MB headless Pi
+before adopting that generation path. The current change adds no LLM worker,
+training, regex intent rules or dependency.
+
+Evaluate storage and actual fresh-request routing separately:
+
+```bash
+python scripts/evaluate_memory.py --output logs/memory-content.json
+python scripts/evaluate_memory.py --with-routing --output logs/memory-routing.json
+```
+
+These checks use disposable history and stub all non-history tools. They never
+open the user's database. A nonzero exit code reports unmet expectations;
+known history-routing failures are not counted as successes. The routing-only
+suite is `scripts/evaluate_routing.py`; `--without-memory` measures the full
+catalogue alone.
+
 History is not automatically appended to OS-action prompts. Reference resolution
-such as "delete that file again" and multi-step follow-ups are not implemented.
+such as "delete that file again" and multi-step OS actions are not implemented.
 
 Memory uses Python's standard SQLite library, with no embedding model or
 SmolLM worker. It retains up to 1,000 turns, caps each request/answer/arguments
@@ -79,6 +121,10 @@ is capped at 16 MiB; these are not limits on total process RAM. SQLite journals
 may temporarily take additional disk space. Topic search uses bounded text
 matching, not semantic embeddings or model training. A storage failure reports
 that the turn was not saved and does not rerun the tool.
+
+`get_system_info` uses `platform` and `psutil` for CPU, installed RAM, and OS
+information on Windows and Linux. GPU fields are explicitly unprobed; no GPU
+runtime or desktop session is loaded to produce this report.
 
 Local development decisions, session notes and implementation reports live in
 `.local/` and are excluded from Git. For development on this machine, consult

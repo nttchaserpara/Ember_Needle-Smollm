@@ -433,7 +433,7 @@ def search_notes(query: str):
     pass
 
 @needle.tool
-def search_conversation_history(query: str = ""):
+def search_conversation_history(query: str = "", scope: str = "all"):
     """Search saved conversation history for previous user messages and Ember responses.
 
     Retrieve past discussions, requests, and reported outcomes across sessions.
@@ -681,6 +681,33 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
 
     tool_registry: instance dari emberos.tools.ToolRegistry (real EmberOS)
     """
+    history_requested = False
+    if getattr(tool_registry, "memory", None) is not None:
+        from emberos.history_routing import select_history
+
+        selected = select_history(query)
+        if diagnostics is not None:
+            diagnostics["history_selection"] = {"model_input": query, "raw_model_result": selected}
+        validation = selected.get("validation") or {}
+        proposals = selected.get("function_calls") or []
+        # The small view may propose live-data tools, but is never allowed to
+        # execute them. A history choice only prevents conflicting live actions;
+        # the main model must still select the tool and supply its arguments.
+        history_proposed = any(call.get("name") == "search_conversation_history" for call in proposals)
+        if history_proposed:
+            if validation.get("negation"):
+                return {"route": "no_action", "needle_confidence": selected.get("confidence"),
+                        "response": "No action taken.", "reason": "negated_request", "truncated": False}
+            confidence = selected.get("confidence")
+            if (selected.get("success") is not True or selected.get("error")
+                    or validation.get("ungrounded") or len(proposals) != 1
+                    or proposals[0].get("arguments") != {}
+                    or confidence is None or confidence < CONFIDENCE_THRESHOLD):
+                return {"route": "unresolved_tool_request", "needle_confidence": confidence,
+                        "response": "I couldn't reliably interpret this conversation-history request.",
+                        "reason": "uncertain_history_request", "truncated": False}
+            history_requested = True
+
     known_call = _known_intent_call(query)
     model_query = query
     path_alias = None
@@ -713,6 +740,8 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
                           "ungrounded_arguments")
 
     calls = result.get("function_calls") or []
+    if history_requested and (len(calls) != 1 or calls[0].get("name") != "search_conversation_history"):
+        return unresolved("I couldn't reliably interpret this conversation-history request.", "conflicting_history_route")
     if len(calls) > 1:
         return unresolved("This request needs multiple actions. Please ask for one action at a time for now.", "multiple_actions")
     has_match = bool(calls)

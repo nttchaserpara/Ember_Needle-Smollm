@@ -14,6 +14,18 @@ from emberos.outcomes import ToolOutput
 MAX_TURNS = 1000
 MAX_DATABASE_BYTES = 16 * 1024 * 1024
 MAX_RECALL_BYTES = 6000
+HISTORY_SCOPES = {"all": "all saved sessions", "current_session": "the current session",
+                  "previous_session": "the previous saved session"}
+_ASCII_WORD_SEPARATORS = str.maketrans({chr(code): " " for code in range(128)
+                                      if not chr(code).isalnum()})
+
+
+def _words(text):
+    """Whole-word lookup tokens only; this never classifies user intent."""
+    text = text.casefold()
+    if text.isascii():
+        return set(text.translate(_ASCII_WORD_SEPARATORS).split())
+    return set("".join(char if char.isalnum() else " " for char in text).split())
 
 
 def _clip(value, limit):
@@ -129,36 +141,68 @@ class ConversationMemory:
                 tool == "search_conversation_history" or route == "memory_view",
             ))
 
-    def search(self, query="", limit=5):
+    def search(self, query="", limit=5, *, scope="all"):
         if not isinstance(query, str):
             raise ValueError("query must be text")
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 5:
             raise ValueError("limit must be between 1 and 5")
-        # This tokenization is only for database lookup, never intent routing.
-        words = "".join(char if char.isalnum() else " " for char in query[:512]).lower().split()
-        terms = list(dict.fromkeys(word[:64] for word in words))[:8]
+        if scope not in HISTORY_SCOPES:
+            raise ValueError("Unknown conversation history scope")
+        if len(query) > 512:
+            raise ValueError("Search topics must be at most 512 characters")
+        terms = _words(query)
         if query.strip() and not terms:
             return []
         fields = "id, session_id, created_at, request, response, route, tool, arguments_json, status, success, truncated"
+        best = []
         with self._connect() as db:
-            if terms:
-                corpus = "lower(request || ' ' || response || ' ' || arguments_json)"
-                score = " + ".join(f"(instr({corpus}, ?) > 0)" for _ in terms)
-                rows = db.execute(
-                    f"SELECT {fields} FROM (SELECT *, ({score}) AS score FROM turns "
-                    "WHERE is_recall = 0) WHERE score > 0 ORDER BY score DESC, id DESC LIMIT ?",
-                    (*terms, limit),
-                ).fetchall()
-            else:
-                rows = db.execute(f"SELECT {fields} FROM turns WHERE is_recall = 0 "
-                                  "ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
-        return [dict(row) for row in rows]
+            where, parameters = "is_recall = 0", []
+            if scope != "all":
+                session = self.session_id
+                if scope == "previous_session":
+                    previous = db.execute("SELECT session_id FROM turns WHERE session_id != ? "
+                                          "AND is_recall = 0 ORDER BY id DESC LIMIT 1",
+                                          (self.session_id,)).fetchone()
+                    if previous is None:
+                        return []
+                    session = previous[0]
+                where += " AND session_id = ?"
+                parameters.append(session)
+            # Stream the bounded store; retain only five candidates, rather
+            # than loading the database or adding an embedding model/index.
+            for row in db.execute(f"SELECT {fields} FROM turns WHERE {where} ORDER BY id DESC", parameters):
+                score = (True, 0, 0, row["id"])
+                if terms:
+                    request = _words(row["request"])
+                    # Failure output can contain traceback paths and boilerplate
+                    # unrelated to the subject. Retrieve failures by their inputs.
+                    failed = row["success"] == 0 or row["status"] in {"error", "unsupported"}
+                    answer = set() if failed else _words(row["response"])
+                    arguments = _words(row["arguments_json"])
+                    if not terms <= request | answer | arguments:
+                        continue
+                    # Prefer reported results over matching failed attempts,
+                    # preserving failure labels in displayed excerpts.
+                    score = (not failed, len(terms & request), len(terms & arguments), row["id"])
+                identity = (row["request"], row["response"], row["status"])
+                if any(candidate[1] == identity for candidate in best):
+                    continue
+                best.append((score, identity, dict(row)))
+                best.sort(key=lambda candidate: candidate[0], reverse=True)
+                del best[limit:]
+                if not terms and len(best) == limit:
+                    break
+        return [candidate[2] for candidate in best]
 
-    def recall(self, query="", limit=5):
-        rows = self.search(query, limit)
+    def recall(self, query="", limit=5, *, scope="all"):
+        rows = self.search(query, limit, scope=scope)
+        metadata = {"source": "conversation_history", "scope": scope, "query": query,
+                    "retrieval": "matches" if rows else "no_matches", "turn_ids": []}
         if not rows:
-            return ToolOutput("No matching conversation history was found.")
-        blocks = ["Saved conversation excerpts (historical records; not current system state):"]
+            return ToolOutput(f"No matching conversation history was found in {HISTORY_SCOPES[scope]}.",
+                              status="partial", data=metadata)
+        blocks = [f"Saved conversation excerpts from {HISTORY_SCOPES[scope]} "
+                  "(historical records; not current system state):"]
         remaining = MAX_RECALL_BYTES - len(blocks[0].encode("utf-8"))
         for row in rows:
             if remaining < 256:
@@ -171,7 +215,8 @@ class ConversationMemory:
             block = _clip(block, remaining)[0]
             remaining -= len(block.encode("utf-8"))
             blocks.append(block)
-        return ToolOutput("".join(blocks), data={"source": "conversation_history"})
+            metadata["turn_ids"].append(row["id"])
+        return ToolOutput("".join(blocks), data=metadata)
 
     def clear(self):
         with self._connect() as db:

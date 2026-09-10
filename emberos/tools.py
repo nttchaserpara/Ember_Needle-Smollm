@@ -72,10 +72,10 @@ class ToolRegistry:
         self._tools: dict[str, ToolDef] = {}
         self._register_builtins()
 
-    def _search_conversation_history(self, query: str = ""):
+    def _search_conversation_history(self, query: str = "", scope: str = "all"):
         if self.memory is None:
             return ToolOutput.failure("Conversation memory is disabled or unavailable.", status="unsupported")
-        return self.memory.recall(query)
+        return self.memory.recall(query, scope=scope)
 
     def register(self, name: str, description: str, parameters: dict, func: Callable) -> None:
         """Register a tool."""
@@ -763,6 +763,8 @@ class ToolRegistry:
             description="Retrieve past conversations with Ember by topic, including previous requests and reported outcomes",
             parameters={
                 "query": {"type": "string", "description": "Topic words from the request; empty for recent conversations"},
+                "scope": {"type": "string", "enum": ["all", "current_session", "previous_session"],
+                          "description": "The session scope to search"},
             },
             func=self._search_conversation_history,
         )
@@ -924,20 +926,26 @@ def _tool_close_window(title: str) -> str:
     return f"Closed window: {title}"
 
 
-def _tool_get_system_info() -> dict:
-    from emberos.gpu_detect import detect_hardware
-    profile = detect_hardware()
-    return {
-        "cpu_arch": profile.cpu_arch,
-        "cpu_cores": profile.cpu_cores,
-        "cpu_threads": profile.cpu_threads,
-        "ram_gb": profile.ram_gb,
-        "gpu_available": profile.gpu_available,
-        "gpu_name": profile.gpu_name,
-        "gpu_vram_mb": profile.gpu_vram_mb,
-        "gpu_mode": profile.gpu_mode,
-        "cuda_version": profile.cuda_version,
+def _tool_get_system_info() -> ToolResult:
+    import platform
+    import psutil
+
+    info = {
+        "os": platform.system(),
+        "os_release": platform.release(),
+        "cpu_arch": platform.machine(),
+        "cpu_cores": psutil.cpu_count(logical=False),
+        "cpu_threads": psutil.cpu_count(logical=True),
+        "ram_gb": round(psutil.virtual_memory().total / 2**30, 2),
+        # Preserve the old output keys without claiming an unprobed GPU is
+        # absent. No Torch/CUDA imports or desktop session are required.
+        "gpu_available": None,
+        "gpu_name": None,
+        "gpu_vram_mb": None,
+        "gpu_mode": "not_probed",
+        "cuda_version": None,
     }
+    return ToolResult(True, result=info, status="success", data=info)
 
 
 def _tool_kill_process(target: str) -> str:

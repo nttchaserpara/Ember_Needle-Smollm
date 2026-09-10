@@ -29,5 +29,15 @@
   {"query":"What did we discuss about scholarship?","expected":{"name":"search_conversation_history","arguments":{"query":"scholarship"}}},
   {"query":"Show my recent conversations.","expected":{"name":"search_conversation_history","arguments":{}}},
   {"query":"Do not search our conversation history.","expected":null},
-  {"query":"Search conversation history for scholarship","expected":{"name":"search_conversation_history","arguments":{"query":"scholarship"}}}
+  {"query":"Search conversation history for scholarship","expected":{"name":"search_conversation_history","arguments":{"query":"scholarship"}}},
+  {"query":"What did we discuss about disk space?","expected":{"name":"search_conversation_history","arguments":{"query":"disk space"}}},
+  {"query":"What volume did I ask you to set earlier?","expected":{"name":"search_conversation_history","arguments":{"query":"volume"}}},
+  {"query":"Can you look back at our chat about free storage?","expected":{"name":"search_conversation_history","arguments":{"query":"free storage"}}},
+  {"query":"Find our earlier exchange about deadlines.","expected":{"name":"search_conversation_history","arguments":{"query":"deadlines"}}},
+  {"query":"What did I tell you about the backup?","expected":{"name":"search_conversation_history","arguments":{"query":"backup"}}},
+  {"query":"Recall the last answer you gave me about memory usage.","expected":{"name":"search_conversation_history","arguments":{"query":"memory usage"}}},
+  {"query":"Could you show the messages about the workshop?","expected":{"name":"search_conversation_history","arguments":{"query":"workshop"}}},
+  {"query":"What did we discuss about CPU temperature?","expected":{"name":"search_conversation_history","arguments":{"query":"CPU temperature"}}},
+  {"query":"Review our previous discussion on backups.","expected":{"name":"search_conversation_history","arguments":{"query":"backups"}}},
+  {"query":"Do not recall our earlier discussion.","expected":null}
 ]

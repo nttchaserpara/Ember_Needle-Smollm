@@ -19,14 +19,19 @@ from emberos.tools import ToolRegistry, ToolResult
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--without-memory", action="store_true",
+                        help="Evaluate the catalogue alone, without the history-selection stage")
     args = parser.parse_args()
     cases = json.loads((ROOT / "experiments/routing_cases.json").read_text(encoding="utf-8"))
-    registry = ToolRegistry()
+    # A sentinel enables history selection without opening any user database.
+    # All execution, including history reads, remains replaced by record().
+    registry = ToolRegistry(memory=None if args.without_memory else object())
     results = []
     for case in cases:
         calls = []
         raw_results = []
         model_inputs = []
+        diagnostics = {}
         def record(name, params):
             calls.append({"name": name, "arguments": params})
             return ToolResult(True, result="Evaluation only; no action performed.")
@@ -40,7 +45,7 @@ def main():
         with patch.object(registry, "execute_tool", side_effect=record), patch.object(
             needle_router.needle_agent, "complete", side_effect=capture
         ):
-            response = needle_router.route_and_execute(case["query"], registry)
+            response = needle_router.route_and_execute(case["query"], registry, diagnostics=diagnostics)
         expected = case["expected"]
         if expected is None:
             passed = not calls
@@ -55,10 +60,12 @@ def main():
                 passed = False
         results.append({**case, "passed": passed, "calls": calls, "response": response,
                         "model_inputs": model_inputs, "raw_model_results": raw_results,
+                        "routing_diagnostics": diagnostics,
                         "elapsed_seconds": round(time.perf_counter()-started, 3)})
         print(f"{'PASS' if passed else 'FAIL'} {case['query']}", flush=True)
     report = {"needle_version": needle.__version__, "platform": platform.platform(),
               "python_version": platform.python_version(),
+              "history_selection_enabled": not args.without_memory,
               "confidence_threshold": needle_router.CONFIDENCE_THRESHOLD,
               "ordered_schemas": [tool._needle_tool for tool in needle_router.ALL_TOOLS],
               "passed": sum(row["passed"] for row in results), "total": len(results),
