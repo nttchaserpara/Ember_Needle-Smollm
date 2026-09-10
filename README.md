@@ -1,5 +1,9 @@
 # Ember OS agent
 
+Start here: [terminal usage and prompts](docs/USAGE.md) — Windows/Pi startup,
+simple requests, document summaries, conversation memory, and current limits.
+Keep this usage guide updated whenever a feature or its setup changes.
+
 Needle routes English requests to local tools. Document summaries use a managed
 llama.cpp worker with SmolLM2-135M-Instruct Q4_K_M, loaded only for the document
 job and stopped afterwards. If generation fails, Ember returns a labelled
