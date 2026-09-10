@@ -24,5 +24,10 @@
   {"query":"Show my pending tasks","expected":{"name":"list_tasks","arguments":{"show_all":false}}},
   {"query":"Please open calculator","expected":{"name":"launch_app","arguments":{"app_name":"calculator"}}},
   {"query":"Summarize \"/home/example/Ember/experiments/fixtures/sample-summary.txt\"","expected":{"name":"summarize_file","arguments":{"path":"/home/example/Ember/experiments/fixtures/sample-summary.txt"}}},
-  {"query":"Do not summarize \"/home/example/Ember/experiments/fixtures/sample-summary.txt\"","expected":null}
+  {"query":"Do not summarize \"/home/example/Ember/experiments/fixtures/sample-summary.txt\"","expected":null},
+  {"query":"Search our conversation history for scholarship.","expected":{"name":"search_conversation_history","arguments":{"query":"scholarship"}}},
+  {"query":"What did we discuss about scholarship?","expected":{"name":"search_conversation_history","arguments":{"query":"scholarship"}}},
+  {"query":"Show my recent conversations.","expected":{"name":"search_conversation_history","arguments":{}}},
+  {"query":"Do not search our conversation history.","expected":null},
+  {"query":"Search conversation history for scholarship","expected":{"name":"search_conversation_history","arguments":{"query":"scholarship"}}}
 ]

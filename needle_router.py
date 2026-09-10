@@ -432,6 +432,16 @@ def search_notes(query: str):
     """
     pass
 
+@needle.tool
+def search_conversation_history(query: str = ""):
+    """Search saved conversation history for previous user messages and Ember responses.
+
+    Retrieve past discussions, requests, and reported outcomes across sessions.
+    query contains topic words; empty query lists recent conversations.
+    Returns up to five historical conversation excerpts.
+    """
+    pass
+
 # ── Multi-document / synthesis tools ─────────────────────────────────
 @needle.tool
 def create_spreadsheet(path: str, rows: list, sheet_name: str = "Sheet1", open_after: bool = True):
@@ -484,7 +494,7 @@ ALL_TOOLS = [
     mute_volume, get_volume, set_volume, get_brightness, set_brightness, toggle_dark_mode,
     set_dark_mode, get_open_windows, minimize_all_windows, focus_window,
     add_task, list_tasks, complete_task, remove_task, clear_completed_tasks,
-    create_note, search_notes,
+    create_note, search_notes, search_conversation_history,
     batch_read_folder, folder_explain, write_document, create_spreadsheet, create_google_doc,
 ]
 

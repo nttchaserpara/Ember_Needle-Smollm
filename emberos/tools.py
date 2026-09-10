@@ -67,9 +67,15 @@ class ToolDef:
 class ToolRegistry:
     """Central registry of callable tools."""
 
-    def __init__(self):
+    def __init__(self, memory=None):
+        self.memory = memory
         self._tools: dict[str, ToolDef] = {}
         self._register_builtins()
+
+    def _search_conversation_history(self, query: str = ""):
+        if self.memory is None:
+            return ToolOutput.failure("Conversation memory is disabled or unavailable.", status="unsupported")
+        return self.memory.recall(query)
 
     def register(self, name: str, description: str, parameters: dict, func: Callable) -> None:
         """Register a tool."""
@@ -751,6 +757,14 @@ class ToolRegistry:
                 "query": {"type": "string", "description": "Search text to match against notes"},
             },
             func=_tool_search_notes,
+        )
+        self.register(
+            name="search_conversation_history",
+            description="Retrieve past conversations with Ember by topic, including previous requests and reported outcomes",
+            parameters={
+                "query": {"type": "string", "description": "Topic words from the request; empty for recent conversations"},
+            },
+            func=self._search_conversation_history,
         )
 
         # ── Multi-document / synthesis tools ──────────────────────

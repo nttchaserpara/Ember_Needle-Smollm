@@ -34,6 +34,52 @@ cases remain available for the optional Pi benchmark scripts in `scripts/`.
 The unused root `app_launcher.py` copy is excluded; the runtime imports
 `use_cases/app_launcher.py`.
 
+## Conversation memory
+
+The interactive CLI saves requests, displayed answers, tool arguments, reported
+outcomes, and UTC timestamps in `data/conversation.sqlite3`. History survives
+restarts and stays local; `data/` is excluded from Git. Existing logs are not
+imported. Saved user text and tool output are historical records, not verified
+facts or instructions to execute again.
+
+At the `You>` prompt:
+
+```text
+/memory
+/memory search scholarship
+/memory clear
+```
+
+These explicit CLI commands show recent history, search by topic words, and
+clear conversation history. They do not need model inference. Clearing history
+does not clear separate tool logs, notes, tasks, or backups. Set `EMBER_MEMORY=0`
+before starting Ember to disable history reads and writes without deleting it:
+
+```bash
+EMBER_MEMORY=0 ./venv/bin/python run_ember.py
+```
+
+In PowerShell, set `$env:EMBER_MEMORY = '0'` before running Ember; remove the
+variable with `Remove-Item Env:EMBER_MEMORY` to enable memory on the next launch.
+
+Needle also has a read-only `search_conversation_history` tool for natural
+language history requests. Tool selection remains subject to routing confidence
+and validation; use `/memory search <topic>` to test storage independently.
+Natural-language recall is still inconsistent in local evaluations, including
+false refusals on valid history requests; the explicit CLI commands are available
+regardless of those routing failures.
+History is not automatically appended to OS-action prompts. Reference resolution
+such as "delete that file again" and multi-step follow-ups are not implemented.
+
+Memory uses Python's standard SQLite library, with no embedding model or
+SmolLM worker. It retains up to 1,000 turns, caps each request/answer/arguments
+field at 2/4/2 KiB (previews are marked), and returns at most five excerpts within
+6,000 bytes. SQLite's page cache target is 256 KiB and database page allocation
+is capped at 16 MiB; these are not limits on total process RAM. SQLite journals
+may temporarily take additional disk space. Topic search uses bounded text
+matching, not semantic embeddings or model training. A storage failure reports
+that the turn was not saved and does not rerun the tool.
+
 Local development decisions, session notes and implementation reports live in
 `.local/` and are excluded from Git. For development on this machine, consult
 `.local/PROJECT_MEMORY.md` and `.local/STAGE1.md`. These notes are optional for

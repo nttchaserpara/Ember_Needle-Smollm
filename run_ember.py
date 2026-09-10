@@ -9,6 +9,7 @@ Jalanin dari root Ember_tools&llm/:
 """
 
 import os
+import sqlite3
 import sys
 import time
 
@@ -23,6 +24,32 @@ from needle_router import route_and_execute
 from emberos.tools import ToolRegistry
 from emberos.benchmark import RequestMemorySampler
 from emberos.responses import format_tool_response
+from emberos.config import ROOT_DIR
+from emberos.memory import ConversationMemory, memory_command
+
+
+def handle_request(query, registry, memory=None):
+    """Keep persistence failures separate from the already executed action."""
+    try:
+        memory_response = memory_command(query, memory)
+    except (OSError, sqlite3.Error, ValueError) as exc:
+        memory_response = f"Conversation memory is unavailable: {exc}"
+    if memory_response is not None:
+        # Do not record control commands: clearing must leave an empty store,
+        # and displaying history must not recursively fill the history.
+        return {"route": "memory_view", "response": memory_response}
+    try:
+        result = route_and_execute(query, registry)
+    except Exception as exc:
+        result = {"route": "error", "response": f"Request failed: {exc}",
+                  "status": "error", "success": False}
+    if memory is not None:
+        response = format_tool_response(result) if result["route"] == "tool_call" else result["response"]
+        try:
+            memory.record(query, response, result)
+        except (OSError, sqlite3.Error, ValueError) as exc:
+            print(f"[memory] This turn could not be saved: {exc}")
+    return result
 
 
 def _format_bytes(value: int) -> str:
@@ -64,10 +91,18 @@ def _print_benchmark(label: str, elapsed: float | None = None,
 
 
 def main():
-    registry = ToolRegistry()
+    memory = None
+    if os.environ.get("EMBER_MEMORY", "1") != "0":
+        try:
+            memory = ConversationMemory(ROOT_DIR / "data" / "conversation.sqlite3")
+        except (OSError, sqlite3.Error, ValueError) as exc:
+            print(f"[memory] Conversation memory is unavailable: {exc}")
+    registry = ToolRegistry(memory=memory)
     print("EmberOS (Needle OS Agent) -- type 'exit' to quit")
     _print_benchmark("startup", elapsed=time.perf_counter() - _PROGRAM_STARTED)
     print("[mode] SmolLM2 Q4 runs on demand via llama.cpp for document summaries and unloads after each job.")
+    print("[memory] Local conversation history enabled (up to 1,000 turns). Type /memory for recent history."
+          if memory is not None else "[memory] Conversation history disabled or unavailable.")
     print("-" * 50)
 
     while True:
@@ -86,7 +121,7 @@ def main():
         sample = RequestMemorySampler(_PROCESS)
         try:
             with sample:
-                result = route_and_execute(query, registry)
+                result = handle_request(query, registry, memory)
         except Exception as e:
             print(f"[error] {e}")
             _print_benchmark("failed request", time.perf_counter() - started, rss_before, sample)
@@ -97,6 +132,8 @@ def main():
             confidence = result.get("confidence")
             confidence_text = f"{confidence:.2f}" if confidence is not None else "unknown"
             print(f"  [tool={result['tool']} | confidence={confidence_text}]")
+        elif result["route"] == "memory_view":
+            print(result["response"])
         else:
             conf = result.get("needle_confidence")
             conf_str = f"{conf:.2f}" if conf is not None else "None"
