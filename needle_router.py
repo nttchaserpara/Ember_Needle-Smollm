@@ -503,7 +503,6 @@ needle_agent = needle.Needle(tools=ALL_TOOLS, tool_index_path="tools.idx")
 
 _LOW_CONFIDENCE_PLATFORMS = {"aarch64", "armv7l", "armv6l"}
 
-_LOW_CONFIDENCE_PLATFORMS = {"
 CONFIDENCE_THRESHOLD = (
     0.27 if platform.machine() in _LOW_CONFIDENCE_PLATFORMS else 0.5
 )
