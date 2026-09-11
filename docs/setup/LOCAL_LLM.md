@@ -119,6 +119,33 @@ before experimenting with arbitrary conversation in the interactive agent.
 
 Next measure actual document jobs, one at a time:
 
+The routing evaluation records decisions without executing real tools. Several
+non-action inputs still trigger incorrect proposed actions; inspect this report
+before experimenting with arbitrary conversation in the interactive agent.
+
+### ARM confidence gap and platform-aware threshold
+
+Needle's native inference binary is compiled per architecture. On this
+project's test hardware (Pi Zero 2 W, aarch64), the same correct tool match
+scores measurably lower confidence than on x86 Windows for identical input
+and identical selected function call -- confirmed by comparing
+`routing_diagnostics.raw_model_result` across platforms (10 Sep 2026):
+`summarize_file` scored confidence 0.2782 on Pi vs 0.67 on Windows for the
+same query and arguments. This is a scoring-calibration difference, not a
+routing correctness difference.
+
+`needle_router.py` now selects `CONFIDENCE_THRESHOLD` based on
+`platform.machine()`: 0.27 on `aarch64`/`armv7l`/`armv6l`, 0.5 elsewhere. The
+lower value was chosen from `evaluate_routing.py` output, keeping it just low
+enough to recover known-correct low-confidence Pi matches without lowering it
+past two known false-positive cases (`cpu_temperature` misfiring on unrelated
+input, confidence 0.67 and 0.85 -- both already above either threshold, so
+unaffected by this change and still open separately). On this project's Pi
+run, `evaluate_routing.py` moved from 21/41 to 24/41 passing after the change,
+with `unexpected_actions` unchanged at 1. This does not resolve the
+conversation-history/memory routing failures noted elsewhere, or the two
+`cpu_temperature` false positives.
+
 ```sh
 ./venv/bin/python scripts/benchmark_local_llm.py --document experiments/fixtures/sample-summary.txt
 ./venv/bin/python scripts/benchmark_local_llm.py --document experiments/fixtures/pi-long-report.txt
@@ -253,9 +280,14 @@ when the model has already been unloaded. `whole-system RAM` includes all OS and
 application memory; do not add it to Ember's RSS. This sampler is an estimate,
 can miss brief peaks, and can double-count shared pages in the RSS sum.
 
+Confidence scores are not portable between platforms; see "ARM confidence gap
+and platform-aware threshold" above.
+
 On the development PC, if the local test files are present, run backend/fallback
 tests without loading a model. These tests are excluded from Git and are not
 required for setup or available in a fresh Pi clone:
+
+
 
 ```sh
 ./venv/bin/python -m unittest experiments.test_local_llm -v
