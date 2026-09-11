@@ -23,6 +23,7 @@ import json
 import os
 import re
 from pathlib import Path
+import platform
 
 import needle
 
@@ -499,9 +500,18 @@ ALL_TOOLS = [
 ]
 
 needle_agent = needle.Needle(tools=ALL_TOOLS, tool_index_path="tools.idx")
-CONFIDENCE_THRESHOLD = 0.5  # diturunin dari 0.7 -- banyak match yang BENER
-# konsisten nyangkut di 0.4-0.65 (netflix 0.55, volume_down 0.537, list_files
-# 0.40, open_app 0.50). 0.7 kebesaran buat kombinasi 71 tool + model 45M ini.
+_LOW_CONFIDENCE_PLATFORMS = {"aarch64", "armv7l", "armv6l"}
+CONFIDENCE_THRESHOLD = (
+    0.27 if platform.machine() in _LOW_CONFIDENCE_PLATFORMS else 0.5
+)
+# ARM/Pi native inference binary scores confidence systematically lower than
+# x86 for the SAME correct match (confirmed empirically 10 Sep 2026):
+# summarize_file query scored 0.2782 on Pi vs 0.67 on Windows, identical
+# function_call output. 0.27 recovers 3 known-correct low-confidence Pi
+# cases (summarize x2, list_tasks) without affecting the x86 threshold or
+# two unrelated false-positive cases (cpu_temperature misfires at 0.67/0.85,
+# already above any threshold considered here -- separate bug, not fixed here).
+
 
 
 def _user_folder_path(folder_name: str) -> str:
