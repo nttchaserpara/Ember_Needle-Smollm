@@ -51,9 +51,9 @@ except ImportError:
 # ---------------------------------------------------------------------
 # EDIT ME — match these to your actual Pi paths / current model
 # ---------------------------------------------------------------------
-LLAMA_CLI_BIN    = os.path.expanduser("~/projects/llama.cpp/build/bin/llama-cli")
-LLAMA_SERVER_BIN = os.path.expanduser("~/projects/llama.cpp/build/bin/llama-server")
-MODEL_PATH       = os.path.expanduser("~/projects/llama.cpp/models/SmolLM2-135M-Instruct-Q4_K_M.gguf")
+LLAMA_CLI_BIN    = os.path.expanduser("~/Ember_Needle-Smollm/runtimes/llama.cpp/build/bin/llama-cli")
+LLAMA_SERVER_BIN = os.path.expanduser("~/Ember_Needle-Smollm/runtimes/llama.cpp/build/bin/llama-server")
+MODEL_PATH       = os.path.expanduser("~/Ember_Needle-Smollm/models/SmolLM2-135M-Instruct-Q4_K_M.gguf")
 SERVER_HOST      = "127.0.0.1"
 SERVER_PORT      = 8765
 N_THREADS        = os.cpu_count() or 4
