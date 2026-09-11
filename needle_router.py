@@ -502,6 +502,7 @@ ALL_TOOLS = [
 needle_agent = needle.Needle(tools=ALL_TOOLS, tool_index_path="tools.idx")
 
 _LOW_CONFIDENCE_PLATFORMS = {"aarch64", "armv7l", "armv6l"}
+
 CONFIDENCE_THRESHOLD = (
     0.27 if platform.machine() in _LOW_CONFIDENCE_PLATFORMS else 0.5
 )
@@ -511,8 +512,7 @@ CONFIDENCE_THRESHOLD = (
 # function_call output. 0.27 recovers 3 known-correct low-confidence Pi
 # cases (summarize x2, list_tasks) without affecting the x86 threshold or
 # two unrelated false-positive cases (cpu_temperature misfires at 0.67/0.85,
-# already above any threshold considered here -- separate bug, not fixed here).
-
+# already above any threshold considered here -- separate bug, not fixed here.
 
 def _user_folder_path(folder_name: str) -> str:
     """Resolve Windows' configured known folder, with a portable fallback."""
