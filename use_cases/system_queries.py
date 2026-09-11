@@ -2,6 +2,7 @@
 
 import ctypes
 import logging
+import platform
 from emberos.outcomes import ToolOutput
 import subprocess
 from datetime import datetime, timezone
@@ -9,6 +10,9 @@ from datetime import datetime, timezone
 import psutil
 
 logger = logging.getLogger("emberos.use_cases.system_queries")
+
+_IS_WINDOWS = platform.system() == "Windows"
+_PLATFORM_UNSUPPORTED = "This action is not yet supported on this platform."
 
 
 def get_disk_usage() -> str:
@@ -146,6 +150,8 @@ def get_battery_status() -> str:
 
 
 def lock_screen() -> str:
+    if not _IS_WINDOWS:
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
         ctypes.windll.user32.LockWorkStation()
         return "Screen locked."
@@ -154,6 +160,8 @@ def lock_screen() -> str:
 
 
 def sleep_system() -> str:
+    if not _IS_WINDOWS:
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
         subprocess.Popen(
             ["rundll32.exe", "powrprof.dll,SetSuspendState", "0", "1", "0"]
@@ -164,6 +172,8 @@ def sleep_system() -> str:
 
 
 def shutdown_system(delay_seconds: int = 0) -> str:
+    if not _IS_WINDOWS:
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
         subprocess.run(
             ["shutdown", "/s", "/t", str(delay_seconds)],
@@ -176,6 +186,8 @@ def shutdown_system(delay_seconds: int = 0) -> str:
 
 
 def restart_system(delay_seconds: int = 0) -> str:
+    if not _IS_WINDOWS:
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
         subprocess.run(
             ["shutdown", "/r", "/t", str(delay_seconds)],
@@ -188,6 +200,8 @@ def restart_system(delay_seconds: int = 0) -> str:
 
 
 def cancel_shutdown() -> str:
+    if not _IS_WINDOWS:
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
         subprocess.run(["shutdown", "/a"], check=True, capture_output=True)
         return "Scheduled shutdown/restart cancelled."
@@ -206,29 +220,40 @@ _KEYEVENTF_KEYUP = 0x0002
 
 
 def _send_key(vk: int):
+    if not _IS_WINDOWS:
+        raise RuntimeError("Volume key simulation is only supported on Windows.")
     ctypes.windll.user32.keybd_event(vk, 0, 0, 0)
     ctypes.windll.user32.keybd_event(vk, 0, _KEYEVENTF_KEYUP, 0)
 
 
 def volume_up(steps: int = 2) -> str:
+    if not _IS_WINDOWS:
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     for _ in range(max(1, steps)):
         _send_key(_VK_VOLUME_UP)
     return f"Volume increased ({steps} step{'s' if steps != 1 else ''})."
 
 
 def volume_down(steps: int = 2) -> str:
+    if not _IS_WINDOWS:
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     for _ in range(max(1, steps)):
         _send_key(_VK_VOLUME_DOWN)
     return f"Volume decreased ({steps} step{'s' if steps != 1 else ''})."
 
 
 def mute_volume() -> str:
+    if not _IS_WINDOWS:
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     _send_key(_VK_VOLUME_MUTE)
     return "Volume toggled mute."
 
 
 def _master_volume(level: int = None) -> tuple[int, bool]:
     """Read or set the default audio endpoint using Windows Core Audio."""
+    if not _IS_WINDOWS:
+        raise RuntimeError("Master volume control requires Windows Core Audio (pycaw).")
+
     import comtypes
     from pycaw.pycaw import AudioUtilities
 
@@ -255,9 +280,14 @@ def set_volume(level: int) -> str:
     """Set the absolute master audio volume percentage and verify the result."""
     if isinstance(level, bool) or not isinstance(level, int) or not 0 <= level <= 100:
         raise ValueError("Volume level must be an integer between 0 and 100")
-    actual, muted = _master_volume(level)
+    if not _IS_WINDOWS:
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
+    try:
+        actual, muted = _master_volume(level)
+    except Exception as e:
+        return ToolOutput.failure(f"Could not set volume: {e}")
     if actual != level:
-        raise RuntimeError(f"Requested volume {level}%, but the audio device reports {actual}%")
+        return ToolOutput.failure(f"Requested volume {level}%, but the audio device reports {actual}%")
     suffix = " Audio is still muted." if muted else ""
     return ToolOutput(f"Volume set to {actual}%.{suffix}",
                       message=f"Done! Your volume is now {actual}%.{suffix}",
@@ -266,7 +296,12 @@ def set_volume(level: int) -> str:
 
 def get_volume() -> str:
     """Read the master audio volume percentage and mute state."""
-    actual, muted = _master_volume()
+    if not _IS_WINDOWS:
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
+    try:
+        actual, muted = _master_volume()
+    except Exception as e:
+        return ToolOutput.failure(f"Could not read volume: {e}")
     suffix = " (muted)" if muted else ""
     return f"Current volume: {actual}%{suffix}"
 
@@ -276,6 +311,8 @@ def get_volume() -> str:
 # ---------------------------------------------------------------------------
 
 def get_brightness() -> str:
+    if not _IS_WINDOWS:
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
         result = subprocess.run(
             ["powershell", "-Command",
@@ -293,6 +330,8 @@ def get_brightness() -> str:
 def set_brightness(level: int) -> str:
     if isinstance(level, bool) or not isinstance(level, int) or not 0 <= level <= 100:
         raise ValueError("Brightness level must be an integer between 0 and 100")
+    if not _IS_WINDOWS:
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
         script = (
             "$ErrorActionPreference = 'Stop'; "
@@ -330,6 +369,8 @@ def set_brightness(level: int) -> str:
 
 def toggle_dark_mode() -> str:
     """Toggle Windows dark/light mode by flipping the registry key."""
+    if not _IS_WINDOWS:
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     reg_path = r"HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
     script = f"""
 $val = (Get-ItemProperty -Path '{reg_path}' -Name AppsUseLightTheme).AppsUseLightTheme
@@ -353,6 +394,8 @@ if ($new -eq 0) {{ 'dark' }} else {{ 'light' }}
 
 def set_dark_mode(enable: bool) -> str:
     """Explicitly enable or disable dark mode."""
+    if not _IS_WINDOWS:
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     val = 0 if enable else 1
     reg_path = r"HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
     script = f"""
@@ -377,6 +420,8 @@ Set-ItemProperty -Path '{reg_path}' -Name SystemUsesLightTheme -Value {val}
 # ---------------------------------------------------------------------------
 
 def get_open_windows() -> str:
+    if not _IS_WINDOWS:
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
         import pygetwindow as gw
         wins = [w for w in gw.getAllWindows() if w.title.strip()]
@@ -391,6 +436,8 @@ def get_open_windows() -> str:
 
 
 def minimize_all_windows() -> str:
+    if not _IS_WINDOWS:
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
         # Win+D shows desktop / minimizes all
         ctypes.windll.user32.keybd_event(0x5B, 0, 0, 0)        # Win down
@@ -403,6 +450,8 @@ def minimize_all_windows() -> str:
 
 
 def focus_window(title_fragment: str) -> str:
+    if not _IS_WINDOWS:
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
         import pygetwindow as gw
         matches = [w for w in gw.getAllWindows()
