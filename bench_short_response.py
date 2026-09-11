@@ -180,8 +180,12 @@ def run_keep_loaded(server_proc: subprocess.Popen, prompt_id: str, prompt: str) 
 
     t0 = time.perf_counter()
     resp = requests.post(
-        f"http://{SERVER_HOST}:{SERVER_PORT}/completion",
-        json={"prompt": prompt, "n_predict": MAX_TOKENS},
+        f"http://{SERVER_HOST}:{SERVER_PORT}/v1/chat/completions",
+        json={
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": MAX_TOKENS,
+            "temperature": 0.2,
+        },
         timeout=60,
     )
     elapsed = time.perf_counter() - t0
@@ -191,7 +195,7 @@ def run_keep_loaded(server_proc: subprocess.Popen, prompt_id: str, prompt: str) 
 
     ram_after_used, ram_after_avail = _system_ram()
     try:
-        text = resp.json().get("content", "")
+        text = resp.json()["choices"][0]["message"]["content"]
     except Exception:
         text = resp.text
 
