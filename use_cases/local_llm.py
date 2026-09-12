@@ -18,6 +18,29 @@ from emberos.config import ROOT_DIR
 MODEL_PATH = ROOT_DIR / "models" / "SmolLM2-135M-Instruct-Q4_K_M.gguf"
 _JOB_LOCK = threading.Lock()
 
+_PERSISTENT = os.environ.get("EMBER_LLM_PERSISTENT", "0") == "1"
+_SHARED = {"process": None, "base_url": None, "api_key": None, "log": None}
+_SHARED_LOCK = threading.Lock()
+
+
+def _shutdown_shared_server():
+    with _SHARED_LOCK:
+        process = _SHARED.get("process")
+        if process is not None and process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+        log = _SHARED.get("log")
+        if log is not None:
+            log.close()
+
+
+if _PERSISTENT:
+    atexit.register(_shutdown_shared_server)
+
 
 class GenerationError(RuntimeError):
     """Generation cannot be used as a complete summary."""
@@ -64,7 +87,7 @@ class LocalTextClient:
 
     def close(self):
         try:
-            if self.process is not None:
+            if not _PERSISTENT and self.process is not None:
                 if self.process.poll() is None:
                     self.process.terminate()
                     try:
@@ -75,15 +98,16 @@ class LocalTextClient:
                 else:
                     self.process.wait()
         finally:
-            self.process = None
-            if self._log is not None:
-                self._log.close()
-                self._log = None
-            self._base_url = None
+            if not _PERSISTENT:
+                self.process = None
+                if self._log is not None:
+                    self._log.close()
+                    self._log = None
+                self._base_url = None
             atexit.unregister(self.close)
             if self._active:
                 self._active = False
-                _JOB_LOCK.release()
+                _JOB_LOCK.release()  
 
     def _server_binary(self):
         if self.server_path:
@@ -125,6 +149,15 @@ class LocalTextClient:
             raise GenerationError(f"Local model request failed at {route}: {exc}") from exc
 
     def _start(self):
+        if _PERSISTENT:
+            with _SHARED_LOCK:
+                process = _SHARED.get("process")
+                if process is not None and process.poll() is None:
+                    self.process = process
+                    self._base_url = _SHARED["base_url"]
+                    self._api_key = _SHARED["api_key"]
+                    return
+
         if self.process is not None:
             if self.process.poll() is not None:
                 raise GenerationError("The local model worker exited unexpectedly")
@@ -146,6 +179,8 @@ class LocalTextClient:
             "--api-key", self._api_key, "-c", str(self.context_size), "-t", str(self.threads),
             "-np", "1", "-b", "128", "-ub", "64", "-ngl", "0", "--no-context-shift",
         ]
+        if _PERSISTENT:
+            command += ["--sleep-idle-seconds", os.environ.get("EMBER_LLM_SLEEP_IDLE", "90")]
         options = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
         self.process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=self._log,
                                         stderr=subprocess.STDOUT, shell=False, **options)
@@ -155,6 +190,10 @@ class LocalTextClient:
                 raise GenerationError(f"llama-server failed to start; see {log_path}")
             try:
                 if self._request("/health", timeout=1).get("status") == "ok":
+                    if _PERSISTENT:
+                        with _SHARED_LOCK:
+                            _SHARED.update(process=self.process, base_url=self._base_url,
+                                          api_key=self._api_key, log=self._log)
                     return
             except GenerationError:
                 pass
