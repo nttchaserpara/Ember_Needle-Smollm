@@ -19,10 +19,12 @@ from emberos.tools import ToolRegistry, ToolResult
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--cases", type=Path, default=ROOT / "experiments/routing_cases.json",
+                        help="Routing fixture file; execution is always replaced by a recorder")
     parser.add_argument("--without-memory", action="store_true",
                         help="Evaluate the catalogue alone, without the history-selection stage")
     args = parser.parse_args()
-    cases = json.loads((ROOT / "experiments/routing_cases.json").read_text(encoding="utf-8"))
+    cases = json.loads(args.cases.read_text(encoding="utf-8"))
     # A sentinel enables history selection without opening any user database.
     # All execution, including history reads, remains replaced by record().
     registry = ToolRegistry(memory=None if args.without_memory else object())

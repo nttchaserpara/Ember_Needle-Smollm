@@ -1,4 +1,4 @@
-"""Managed, on-demand llama.cpp worker for local document summaries."""
+"""Managed llama.cpp worker for local summaries and outcome-based replies."""
 
 import atexit
 import json
@@ -43,7 +43,7 @@ if _PERSISTENT:
 
 
 class GenerationError(RuntimeError):
-    """Generation cannot be used as a complete summary."""
+    """Generation cannot be used as a complete response."""
 
 
 class LocalTextClient:
@@ -54,14 +54,16 @@ class LocalTextClient:
     )
 
     def __init__(self, model_path=None, server_path=None, context_size=None,
-                 threads=None, request_timeout=None, startup_timeout=None):
+                 threads=None, request_timeout=None, startup_timeout=None,
+                 job_timeout=None, grounding_rule=None):
         self.model_path = Path(model_path or os.environ.get("EMBER_MODEL_PATH", MODEL_PATH)).expanduser().resolve()
         self.server_path = server_path or os.environ.get("EMBER_LLAMA_SERVER")
         self.context_size = int(context_size or os.environ.get("EMBER_LLM_CONTEXT", 2048))
         self.threads = int(threads or os.environ.get("EMBER_LLM_THREADS", 4))
         self.request_timeout = float(request_timeout or os.environ.get("EMBER_LLM_TIMEOUT", 180))
         self.startup_timeout = float(startup_timeout or os.environ.get("EMBER_LLM_STARTUP_TIMEOUT", 120))
-        self.job_timeout = float(os.environ.get("EMBER_LLM_JOB_TIMEOUT", 600))
+        self.job_timeout = float(job_timeout if job_timeout is not None else os.environ.get("EMBER_LLM_JOB_TIMEOUT", 600))
+        self.grounding_rule = self._GROUNDING_RULE if grounding_rule is None else grounding_rule
         if self.context_size < 512 or self.threads < 1 or min(self.request_timeout, self.startup_timeout, self.job_timeout) <= 0:
             raise ValueError("Context must be >= 512; threads and timeouts must be positive")
         self.process = None
@@ -75,7 +77,7 @@ class LocalTextClient:
 
     def __enter__(self):
         if self._active:
-            raise RuntimeError("LocalTextClient already belongs to a document job")
+            raise RuntimeError("LocalTextClient already belongs to a generation job")
         _JOB_LOCK.acquire()
         self._active = True
         self._deadline = time.monotonic() + self.job_timeout
@@ -131,7 +133,7 @@ class LocalTextClient:
     def _remaining(self, maximum):
         remaining = self._deadline - time.monotonic()
         if remaining <= 0:
-            raise GenerationError("Document generation exceeded its time budget")
+            raise GenerationError("Local generation exceeded its time budget")
         return min(maximum, remaining)
 
     def _request(self, route, body=None, timeout=None):
@@ -163,7 +165,7 @@ class LocalTextClient:
                 raise GenerationError("The local model worker exited unexpectedly")
             return
         if not self._active:
-            raise RuntimeError("Start a document job before loading the model")
+            raise RuntimeError("Start a generation job before loading the model")
         if not self.model_path.is_file():
             raise GenerationError("Model missing. Run python scripts/setup_local_llm.py --model-only.")
         binary = self._server_binary()
@@ -204,9 +206,9 @@ class LocalTextClient:
         self._start()
         grounded = [dict(message) for message in messages]
         if grounded and grounded[0].get("role") == "system":
-            grounded[0]["content"] = self._GROUNDING_RULE + grounded[0]["content"]
+            grounded[0]["content"] = self.grounding_rule + grounded[0]["content"]
         else:
-            grounded.insert(0, {"role": "system", "content": self._GROUNDING_RULE})
+            grounded.insert(0, {"role": "system", "content": self.grounding_rule})
         return self._request("/apply-template", {"messages": grounded})["prompt"]
 
     def _count_tokens(self, prompt):

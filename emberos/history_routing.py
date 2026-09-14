@@ -11,12 +11,12 @@ import needle
 HISTORY_SCHEMAS = [
     {
         "name": "search_conversation_history",
-        "description": "Retrieve past conversations between the user and assistant, including previous requests, answers, discussions and reported settings. Searches saved messages relevant to the current question.",
+        "description": "Search conversation memory for past messages, discussions and remembered information. List saved conversations when no topic is specified.",
         "parameters": {"type": "object", "properties": {}},
     },
     {
         "name": "get_system_info",
-        "description": "Read current CPU architecture, core counts and installed memory. Cannot retrieve previous conversations.",
+        "description": "Read hardware specifications, CPU and total physical RAM capacity in gigabytes.",
         "parameters": {"type": "object", "properties": {}},
     },
     {

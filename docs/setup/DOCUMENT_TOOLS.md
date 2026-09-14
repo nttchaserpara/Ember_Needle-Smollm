@@ -41,6 +41,12 @@ Jalur CSV menyimpan nilai sebagai teks; gunakan `create_spreadsheet` untuk
 angka bertipe numerik. Dukungan Word `.docx` yang sudah ada menggunakan
 `python-docx`, yang termasuk dalam requirements di atas.
 
+Pembaca ringkasan mendukung `.docx`, tetapi belum mendukung `.doc` lama.
+Untuk `.doc`, gunakan **Save As** di Word atau LibreOffice untuk membuat
+salinan `.docx`, kemudian berikan path salinan itu ke Ember. Mengganti ekstensi
+nama file saja tidak cukup. Batasan ini berlaku pada Windows dan Linux/Pi;
+pemasangan requirements dokumen tidak menambahkan pembaca `.doc`.
+
 ## Menghubungkan Google Docs sekali di awal
 
 Integrasi menggunakan OAuth aplikasi Desktop dan Google Docs API, sesuai

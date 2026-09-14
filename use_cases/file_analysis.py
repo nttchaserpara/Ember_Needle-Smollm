@@ -2,7 +2,6 @@
 
 import csv
 import difflib
-import io
 import logging
 import re
 import tarfile
@@ -285,34 +284,6 @@ def _read_docx_full(path: Path, max_chars: int = 25_000) -> str:
         return ToolOutput.failure(f"Error reading .docx: {e}")
 
 
-def _sample_for_llm(content: str, budget: int = 3_400) -> tuple[str, bool]:
-    """Return (snippet, was_sampled).
-
-    If content fits in budget, returns it whole.
-    Otherwise samples start (60%) + middle (25%) + end (15%) so the LLM
-    sees representative sections across the entire document.
-    """
-    if len(content) <= budget:
-        return content, False
-
-    start_n  = int(budget * 0.60)
-    mid_n    = int(budget * 0.25)
-    end_n    = budget - start_n - mid_n
-
-    start  = content[:start_n]
-    mid_off = max(start_n, len(content) // 2 - mid_n // 2)
-    middle = content[mid_off: mid_off + mid_n]
-    end    = content[-end_n:] if end_n > 0 else ""
-
-    sampled = (
-        start
-        + f"\n\n[— middle section —]\n\n"
-        + middle
-        + (f"\n\n[— near end —]\n\n" + end if end else "")
-    )
-    return sampled, True
-
-
 _CHUNK_SIZE    = 10_000   # chars per chunk (~2 500 tokens)
 _CHUNK_OVERLAP = 400      # overlap to avoid cutting mid-sentence
 _CHUNK_SUMMARY_TOKENS  = 120
@@ -516,6 +487,18 @@ def _split_sentences(text: str) -> list[str]:
     return [s.strip() for s in parts if len(s.split()) >= 4]
 
 
+def legacy_word_unavailable(path: str) -> ToolOutput:
+    """Explain a known format limitation without reading or converting a file."""
+    return ToolOutput.failure(
+        f"Cannot summarize {Path(path).name}: legacy Word .doc files are not supported yet. "
+        "Open the file in Word or LibreOffice and use Save As to create a .docx copy, "
+        "then summarize that copy. Renaming the extension alone does not convert the file. "
+        "No summary was created.",
+        status="unsupported",
+        data={"path": str(path), "format": ".doc", "suggested_format": ".docx"},
+    )
+
+
 def summarize_file(path: str, llm_client=None) -> str:
     """Read a file at the given path and return a summary.
 
@@ -531,6 +514,8 @@ def summarize_file(path: str, llm_client=None) -> str:
     # Read more content upfront so chunked summarization has enough material
     if not p.is_file():
         return ToolOutput.failure(f"Not a document file: {p.name}")
+    if p.suffix.lower() == ".doc":
+        return legacy_word_unavailable(str(p))
     if p.suffix.lower() not in _TEXT_EXTENSIONS | {".pdf", ".docx", ".xlsx", ".pptx"}:
         return ToolOutput.failure(f"Cannot extract text from {p.name}: unsupported document format.", status="unsupported")
     content = _read_full(p, max_chars=80_001)
@@ -601,45 +586,6 @@ def summarize_file(path: str, llm_client=None) -> str:
     return ToolOutput(f"{header}\n\nExtractive summary (selected source sentences):\n{extract}",
                       status="fallback", message="Model summarization was unavailable or incomplete. Here are selected sentences from the source.",
                       data={"method": "extractive", "path": str(p), "source_limited": source_limited})
-
-
-def find_similar_files(filename: str, search_roots: list = None) -> list:
-    """Return up to 3 files whose names closely match `filename`."""
-    import difflib
-
-    stem = Path(filename).stem.lower()
-    ext  = Path(filename).suffix.lower()
-
-    if not search_roots:
-        home = Path.home()
-        search_roots = [
-            home / "Desktop", home / "Downloads", home / "Documents",
-            home / "Pictures", home / "Videos", home,
-        ]
-    else:
-        search_roots = [Path(r) for r in search_roots]
-
-    candidates = []
-    pattern = f"*{ext}" if ext else "*"
-    for root in search_roots:
-        if not root.exists():
-            continue
-        try:
-            for p in root.rglob(pattern):
-                candidates.append(p)
-                if len(candidates) >= 300:
-                    break
-        except (PermissionError, OSError):
-            pass
-        if len(candidates) >= 300:
-            break
-
-    scored = [
-        (difflib.SequenceMatcher(None, stem, c.stem.lower()).ratio(), c)
-        for c in candidates
-    ]
-    scored.sort(key=lambda x: -x[0])
-    return [str(c) for score, c in scored[:3] if score >= 0.4]
 
 
 def analyze_attached_files(file_paths: list[str], user_message: str,

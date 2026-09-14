@@ -3,14 +3,15 @@
 bench_short_response.py — EmberOS-Pi benchmark for short, frequent
 natural-language tool-confirmation responses.
 
-Tests the SPECIFIC workload from the roadmap note:
+Explores the planned workload from the roadmap note:
   "generate pendek tapi setiap kali ada tool call"
-as opposed to the one-off long-document summarize workload already
-measured (204.85 MiB peak RSS / 12.18s for a 107-byte file).
+The current CLI has an outcome-reply renderer. To evaluate that implementation,
+use scripts/evaluate_replies.py. This older standalone experiment does not run
+the production agent or prove its total Pi footprint.
 
 Measures, for EACH of N short prompts, in BOTH modes:
   - load-per-call : spawn llama-cli fresh, run one generation, exit
-                     (mirrors current production behaviour for summarize)
+                     (an experimental CLI baseline)
   - keep-loaded   : one llama-server process stays resident for the
                      whole run; each prompt is a request over HTTP
 
@@ -18,6 +19,12 @@ For each call, records:
   wall latency (s), peak RSS during the call (MiB), whole-system RAM
   used/available (MiB), and the raw generated text (for manual
   faithfulness scoring — see the note printed at the end).
+
+Production document summaries use a managed llama-server per document job,
+with tokenizer-based chunking and validation in use_cases/local_llm.py.
+Use scripts/benchmark_local_llm.py to measure that implementation. This
+experiment still needs configurable paths and failure/partial-outcome cases
+before it can support a decision about generated tool confirmations.
 
 Results are appended to a CSV automatically — no manual copy-paste
 into a spreadsheet needed.

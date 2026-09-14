@@ -255,6 +255,12 @@ rewrite. The extractive fallback also selects a subset of source sentences.
 
 ## Configuration
 
+The same worker also powers short outcome replies in the interactive CLI.
+Reply prompts use their own instructions instead of the document-summary
+instructions; document behavior is retained. See
+[natural replies](NATURAL_REPLIES.md) for automatic generation/fallback,
+bounded conversation context, the separate 45-second reply budget and Pi evaluation.
+
 | Environment variable | Default | Purpose |
 | --- | --- | --- |
 | `EMBER_MODEL_PATH` | `models/SmolLM2-135M-Instruct-Q4_K_M.gguf` | Override model location |

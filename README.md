@@ -4,10 +4,16 @@ Start here: [terminal usage and prompts](docs/USAGE.md) — Windows/Pi startup,
 simple requests, document summaries, conversation memory, and current limits.
 Keep this usage guide updated whenever a feature or its setup changes.
 
-Needle routes English requests to local tools. Document summaries use a managed
-llama.cpp worker with SmolLM2-135M-Instruct Q4_K_M, loaded only for the document
-job and stopped afterwards. If generation fails, Ember returns a labelled
-extractive summary. No fine-tuning or new regex routing is involved.
+Needle routes English requests to local tools. Document summaries and short
+outcome replies use SmolLM2-135M-Instruct Q4_K_M through managed llama.cpp jobs.
+By default, the worker stops after each generation job. Document generation
+can fall back to labelled source extracts; reply generation can fall back to
+the original tool response. No fine-tuning or new regex routing is involved.
+
+Short replies automatically use SmolLM with the current request, reported
+outcome and up to two short saved turns for the same tool. Invalid or unavailable
+generation falls back to the original response. Conversation context does not
+train or update model weights. See the [natural reply guide](docs/setup/NATURAL_REPLIES.md).
 
 See [the local LLM setup guide](docs/setup/LOCAL_LLM.md) for setup on Windows and Raspberry Pi OS Lite,
 the model directory, memory settings, tests, and benchmark commands.
@@ -35,8 +41,17 @@ Run all setup commands from the project root, even when reading a guide in
 Development test scripts (`experiments/*.py`) and recorded reports
 (`experiments/results/`) are excluded from Git. Small text fixtures and routing
 cases remain available for the optional Pi benchmark scripts in `scripts/`.
-The unused root `app_launcher.py` copy is excluded; the runtime imports
-`use_cases/app_launcher.py`.
+The application launcher lives in `use_cases/app_launcher.py`.
+
+## Undo
+
+Ask `undo it` to restore the last supported change in the current session.
+There is one undo slot and no redo. Windows supports volume/mute and brightness
+restoration; Windows and Linux/Pi support adding, completing and removing tasks.
+An executed change replaces the slot, including unsupported or failed changes;
+read-only requests and routing refusals leave it intact. Undo checks that the
+target still matches the recorded post-state before restoring it.
+See [the undo guide](docs/setup/UNDO.md) for exact scope and routing limitations.
 
 ## Conversation memory
 
@@ -76,7 +91,11 @@ recall. It can prevent a conflicting live action but cannot execute tools or
 turn the full question into a search query. The main Needle router must select
 the history tool and generate valid arguments at the existing confidence
 threshold. A disagreement or uncertain result returns an unresolved status
-without opening a menu. Both views use the existing engine and weights.
+with `/memory` command guidance, without opening a menu. Both views use the
+existing engine and weights. The selection descriptions distinguish remembered
+conversation contents from physical RAM capacity. In the Windows regression
+check, "what's in memory now?" now declines instead of reading hardware;
+it still does not successfully retrieve history through natural language.
 
 Natural-language history and time interpretation remain unreliable. Removing
 the menus restores independent input handling; it does not solve semantic
@@ -96,10 +115,11 @@ session is the latest earlier session containing retained non-recall turns,
 not necessarily yesterday or the latest discussion of a particular topic.
 Session filtering happens before ranking; the old UI no longer selects it.
 
-LLM-generated clarification questions and brief tool responses are planned
-work. Measure correctness, latency and total RAM on the 512 MB headless Pi
-before adopting that generation path. The current change adds no LLM worker,
-training, regex intent rules or dependency.
+Brief outcome replies can now be rephrased by the existing local model after
+execution. The displayed answer is stored in history; debug comparisons are
+not stored as extra conversations. This presentation layer does not resolve
+history intent, reference resolution or multi-step clarification. Evaluate
+faithfulness, latency and total RAM on the physical Pi before relying on it.
 
 Evaluate storage and actual fresh-request routing separately:
 
@@ -132,5 +152,7 @@ runtime or desktop session is loaded to produce this report.
 
 Local development decisions, session notes and implementation reports live in
 `.local/` and are excluded from Git. For development on this machine, consult
-`.local/PROJECT_MEMORY.md` and `.local/STAGE1.md`. These notes are optional for
-running a fresh clone; public setup instructions live in `docs/setup/`.
+`.local/PROJECT_MEMORY.md` for current status and priorities. Dated decisions
+and old results are in `.local/PROJECT_HISTORY.md` and `.local/STAGE1.md`.
+These notes are optional for running a fresh clone; public setup instructions
+live in `docs/setup/`.

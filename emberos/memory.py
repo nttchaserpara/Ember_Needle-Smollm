@@ -14,6 +14,9 @@ from emberos.outcomes import ToolOutput
 MAX_TURNS = 1000
 MAX_DATABASE_BYTES = 16 * 1024 * 1024
 MAX_RECALL_BYTES = 6000
+MAX_REPLY_HISTORY_TURNS = 2
+MAX_REPLY_HISTORY_REQUEST = 200
+MAX_REPLY_HISTORY_RESPONSE = 300
 HISTORY_SCOPES = {"all": "all saved sessions", "current_session": "the current session",
                   "previous_session": "the previous saved session"}
 _ASCII_WORD_SEPARATORS = str.maketrans({chr(code): " " for code in range(128)
@@ -193,6 +196,24 @@ class ConversationMemory:
                 if not terms and len(best) == limit:
                     break
         return [candidate[2] for candidate in best]
+
+    def reply_context(self, tool):
+        """Small, complete past turns for the already selected tool.
+
+        This lookup happens after execution. It cannot select a tool or supply
+        arguments. Skip large/truncated turns rather than cut off a qualifier.
+        """
+        if not isinstance(tool, str) or not tool or tool == "search_conversation_history":
+            return []
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT id, created_at, request, response, status FROM turns "
+                "WHERE tool = ? AND route = 'tool_call' AND is_recall = 0 AND truncated = 0 "
+                "AND length(request) <= ? AND length(response) <= ? "
+                "ORDER BY id DESC LIMIT ?",
+                (tool, MAX_REPLY_HISTORY_REQUEST, MAX_REPLY_HISTORY_RESPONSE, MAX_REPLY_HISTORY_TURNS),
+            ).fetchall()
+        return [dict(row) for row in reversed(rows)]
 
     def recall(self, query="", limit=5, *, scope="all"):
         rows = self.search(query, limit, scope=scope)

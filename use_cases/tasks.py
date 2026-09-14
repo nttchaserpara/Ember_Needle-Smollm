@@ -11,6 +11,7 @@ from emberos.config import ROOT_DIR
 logger = logging.getLogger("emberos.use_cases.tasks")
 
 _DB_PATH = ROOT_DIR / "data" / "ember.db"
+_TASK_COLUMNS = "id, title, due_date, priority, created_at, completed, completed_at"
 
 
 class TaskManager:
@@ -78,27 +79,62 @@ class TaskManager:
         return [self._row_to_dict(r) for r in rows]
 
     def complete(self, task_id: int) -> dict | None:
-        completed_at = datetime.now(timezone.utc).isoformat()
-        with self._lock:
-            cur = self._conn.execute(
-                "UPDATE tasks SET completed = 1, completed_at = ? WHERE id = ? AND completed = 0",
-                (completed_at, task_id),
-            )
-            self._conn.commit()
-            if cur.rowcount == 0:
-                return None
-            row = self._conn.execute(
-                "SELECT id, title, due_date, priority, created_at, completed, completed_at "
-                "FROM tasks WHERE id = ?",
-                (task_id,),
-            ).fetchone()
+        return self.complete_with_snapshot(task_id)[1]
+
+    def _get(self, task_id):
+        row = self._conn.execute(f"SELECT {_TASK_COLUMNS} FROM tasks WHERE id = ?", (task_id,)).fetchone()
         return self._row_to_dict(row) if row else None
 
-    def remove(self, task_id: int) -> bool:
+    def get(self, task_id: int) -> dict | None:
         with self._lock:
-            cur = self._conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
-            self._conn.commit()
-            return cur.rowcount > 0
+            return self._get(task_id)
+
+    def complete_with_snapshot(self, task_id: int):
+        """Capture the old row and change it in the same write transaction."""
+        completed_at = datetime.now(timezone.utc).isoformat()
+        with self._lock, self._conn:
+            self._conn.execute("BEGIN IMMEDIATE")
+            before = self._get(task_id)
+            if before is None or before["completed"]:
+                return None, None
+            self._conn.execute(
+                "UPDATE tasks SET completed = 1, completed_at = ? WHERE id = ?",
+                (completed_at, task_id),
+            )
+            return before, self._get(task_id)
+
+    def remove(self, task_id: int) -> bool:
+        return self.remove_with_snapshot(task_id) is not None
+
+    def remove_with_snapshot(self, task_id: int):
+        with self._lock, self._conn:
+            self._conn.execute("BEGIN IMMEDIATE")
+            before = self._get(task_id)
+            if before is not None:
+                self._conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+            return before
+
+    def restore_snapshot(self, task_id: int, before, expected):
+        """Restore only this row if it still matches the recorded post-state."""
+        from emberos.undo import UndoConflict
+        with self._lock, self._conn:
+            self._conn.execute("BEGIN IMMEDIATE")
+            if self._get(task_id) != expected:
+                raise UndoConflict(f"Task #{task_id} changed after the last action.")
+            if before is None:
+                self._conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+            else:
+                keys = _TASK_COLUMNS.split(", ")
+                values = [before[key] for key in keys]
+                if expected is None:
+                    self._conn.execute(f"INSERT INTO tasks ({_TASK_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?)", values)
+                else:
+                    self._conn.execute(
+                        "UPDATE tasks SET title=?, due_date=?, priority=?, created_at=?, completed=?, completed_at=? WHERE id=?",
+                        values[1:] + [task_id],
+                    )
+            if self._get(task_id) != before:
+                raise RuntimeError("Restored task did not match its saved state.")
 
     def clear_completed(self) -> int:
         with self._lock:

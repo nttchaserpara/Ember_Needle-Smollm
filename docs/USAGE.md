@@ -1,12 +1,13 @@
 # Panduan penggunaan terminal Ember
 
-Diperbarui: 10 September 2026. Panduan ini mengikuti kemampuan yang sudah ada,
+Diperbarui: 14 September 2026. Panduan ini mengikuti kemampuan yang sudah ada,
 termasuk batasan yang masih ditemukan. Semua prompt untuk Ember memakai bahasa
 Inggris. Jalankan satu permintaan, tunggu hasilnya, lalu lanjutkan.
 
 Langsung ke: [Windows](#2-menjalankan-di-windows--terminal-vs-code),
 [prompt sederhana](#3-prompt-sederhana-untuk-mulai),
 [summarize](#4-summarize-dokumen), [memory](#5-memory-percakapan),
+[balasan natural](#balasan-natural-dan-debugging),
 [Pi/SSH](#7-menjalankan-di-pi-melalui-ssh).
 
 ## 1. Bedakan terminal dengan prompt Ember
@@ -93,6 +94,19 @@ Daftar bisa kosong. Routing tugas pernah berhasil pada evaluasi lokal, tetapi
 variasi kalimat dan perilaku di Pi tetap perlu diuji. Sapaan seperti `hello`
 belum berarti tersedia chatbot percakapan umum dengan respons LLM.
 
+Untuk brightness pada layar Windows yang mendukung WMI:
+
+```text
+turn my screen brightness to 30
+```
+
+Ember membaca ulang persentase dari Windows sebelum menampilkan `[OK]`.
+Provider yang tidak mengembalikan `ReturnValue` sekarang tetap diperiksa lewat
+pembacaan ulang, bukan langsung dianggap menolak perubahan. Error Windows dan
+hasil yang tidak sesuai target tetap dilaporkan sebagai gagal atau parsial.
+Perbaikan diuji dengan provider tiruan serta pemanggilan ke layar lokal pada
+nilai yang sudah aktif; dukungan monitor lain dan Linux belum dibuktikan.
+
 ## 4. Summarize dokumen
 
 ### Persiapan Windows, sebelum masuk ke Ember
@@ -167,6 +181,18 @@ absolut file contoh di PowerShell, lakukan **sebelum membuka Ember**:
 Tempel path yang dihasilkan setelah kata `Summarize`, di dalam tanda kutip.
 PDF hasil scan tanpa teks membutuhkan OCR; pemasangan requirements dokumen
 belum menyediakan alur OCR tersebut.
+
+Word yang didukung adalah **`.docx`**. Format Word lama **`.doc` belum didukung**,
+baik di Windows maupun Linux/Pi. Untuk file `.doc`, buka di Word atau LibreOffice,
+gunakan **Save As** untuk membuat salinan `.docx`, lalu minta Ember meringkas
+path salinan tersebut. Mengganti nama ekstensi saja tidak mengonversi isinya.
+
+Perbaikan 14 September menjaga path `.doc` panjang tetap utuh. Jika model memilih
+ringkasan dengan referensi file yang benar, Ember menjelaskan batasan `.doc` dan
+cara konversinya. Saat confidence rendah, penjelasan diberikan tanpa menjalankan
+tool; pada pemanggilan tool, statusnya `[UNAVAILABLE]`. Ini belum menambahkan
+pembaca `.doc`; tidak ada ringkasan dokumen yang dibuat. Mode balasan natural
+dapat memuat SmolLM untuk menyusun ulang penjelasan keterbatasan tersebut.
 
 ### Memahami hasil summarize
 
@@ -253,6 +279,19 @@ Which documents did we talk about last time?
 
 Gunakan `/memory` untuk mengakses data saat routing bahasa alami belum mampu
 menangani kalimat tersebut. Penyimpanan riwayat tidak melatih bobot model.
+
+Pada uji Windows 14 September, `what's in memory now?` sekarang ditolak dengan
+petunjuk perintah memory, tanpa memanggil `get_system_info`. Pertanyaan
+`what did we discuss about my screen brightness?` juga masih belum menghasilkan
+recall. Ini perbaikan penanganan salah rute, belum penyelesaian recall bahasa
+alami. Untuk membaca catatan brightness yang tersimpan, gunakan:
+
+```text
+/memory search brightness
+```
+
+Catatan lama yang bertuliskan gagal tetap ditampilkan dengan status aslinya;
+perbaikan kode tidak mengubah riwayat menjadi sukses.
 
 ### Pengaturan opsional
 
@@ -437,9 +476,16 @@ persiapan paket audio Windows bukan port audio/brightness untuk Linux.
 - `sampled peak RSS (Ember + children)` adalah perkiraan puncak selama job.
   `Ember RSS now` diukur setelah job, saat model mungkin sudah dilepas.
 
-Respons singkat dan klarifikasi yang dihasilkan LLM, pemahaman history yang
-andal, serta multi-step OS actions masih pekerjaan lanjutan. Pertanyaan RAM
-tersedia juga masih bisa salah diarahkan ke informasi RAM terpasang.
+Balasan singkat dari hasil tool sekarang dapat ditulis ulang oleh SmolLM.
+Klarifikasi dengan konteks, pemahaman history yang andal, serta multi-step OS
+actions masih pekerjaan lanjutan. Pertanyaan RAM tersedia juga masih bisa
+salah diarahkan ke informasi RAM terpasang.
+
+Untuk pengujian ulang setelah pembaruan, coba prompt disk pada bagian 3,
+ringkasan fixture `.txt` pada bagian 4, serta `/memory` pada bagian 5.
+Di Windows, kontrol volume dan brightness memerlukan perangkat yang mendukung;
+di Pi, gunakan benchmark bagian 7 untuk memisahkan kegagalan routing dari
+kegagalan model. Dukungan `.doc` lama dan OCR masih belum tersedia.
 
 Evaluasi tanpa menjalankan tindakan OS tersedia dari shell Windows:
 
@@ -451,6 +497,96 @@ Evaluasi tanpa menjalankan tindakan OS tersedia dari shell Windows:
 Pada Pi, ganti interpreter dengan `./venv/bin/python`. Hasil memory memakai
 database sementara dan masih memiliki kasus gagal yang diketahui; evaluasi
 bukan langkah wajib untuk memakai aplikasi.
+
+## Balasan natural
+
+Restart Ember setelah memperbarui kode. Balasan singkat otomatis memakai
+SmolLM yang sama dengan summarize. Jika generasi gagal atau mengubah fakta
+yang diperiksa, Ember memakai balasan asli. Pengguna cukup menulis permintaan
+biasa; tidak ada mode balasan yang perlu dipilih.
+
+```text
+what is my current volume
+```
+
+Contoh tersebut membaca volume pada Windows. SmolLM menerima pertanyaan,
+hasil tool saat ini, serta maksimal dua percakapan singkat tersimpan dari tool
+yang sama. Riwayat dipakai sebagai konteks, bukan kondisi perangkat sekarang.
+Ini tidak melatih atau mengubah bobot model. Angka yang sama bisa menghasilkan
+kalimat yang sama; variasi kata bukan ukuran pemahaman.
+
+Status seperti `[OK]`, `[FAILED]`, dan `[PARTIAL]` tetap ditentukan oleh hasil
+tool. JSON, tabel, isi file, hasil pencarian history, dan ringkasan dokumen
+tersaji utuh. Generasi balasan tidak menjalankan ulang tool dan tidak
+memperbaiki salah rute Needle. Jika memory tidak tersedia, model tetap bisa
+menjawab dari hasil saat ini. Riwayat panjang atau terpotong tidak dimasukkan
+ke prompt; batasnya dijelaskan dalam [panduan balasan natural](setup/NATURAL_REPLIES.md).
+
+Untuk pengujian pengembangan pada Pi, jalankan dari **shell**:
+
+```bash
+./venv/bin/python scripts/evaluate_replies.py --output logs/pi-replies.json
+```
+
+Skrip memakai hasil tool tiruan dan database sementara, tanpa tindakan OS.
+Alur generasi sama dengan aplikasi. Laporan mencatat keluaran model, fallback,
+konteks terpakai, waktu, dan puncak RAM proses. Hasil Windows tidak menjamin
+kecocokan atau kecepatan di Pi Zero 2 W; pengukuran fisik masih diperlukan.
+
+## Undo satu tindakan terakhir
+
+Setelah restart dengan kode terbaru, lakukan satu tindakan yang didukung lalu
+ketik permintaan biasa berikut di `You>`:
+
+```text
+undo it
+```
+
+Contoh Windows: ubah volume ke 70, lalu `undo it` untuk kembali ke nilai yang
+terbaca sebelum perubahan. Nilai sebelumnya dicatat oleh executor; model tidak
+menebaknya dari chat. Jika volume sudah 70 sejak awal, tindakan itu tidak membuat
+perubahan dan tidak menyediakan undo. Pemeriksaan perangkat memakai identitas
+endpoint, nilai volume, dan status mute.
+
+Dukungan saat ini:
+
+- **Windows:** set/up/down volume, toggle mute, dan set brightness. Untuk beberapa
+  monitor, masing-masing level sebelumnya dipulihkan dengan identitas monitor.
+- **Windows dan Linux/Pi:** penambahan, penyelesaian, dan penghapusan satu task.
+  Undo mengembalikan ID, isi, tanggal, prioritas dan status task yang tercatat.
+- File, shell, launcher, penghapusan massal task dan tindakan lain belum mempunyai
+  pemulihan. Jika tindakan terakhir itu belum didukung, undo menjelaskannya dan
+  tidak melompati tindakan tersebut untuk membatalkan tindakan yang lebih lama.
+
+Hanya satu slot selama sesi berjalan, tanpa redo atau pemulihan setelah restart.
+Permintaan baca seperti `list_tasks`, history, atau volume saat ini tidak
+menghabiskannya. Permintaan yang ditolak router tidak menjalankan tindakan,
+sehingga slot tetap. Tindakan yang benar-benar mulai dieksekusi lalu gagal atau
+parsial menggantikan slot lama dengan status tidak bisa dipulihkan dengan aman.
+
+Jika keadaan diubah dari luar Ember, undo menolak menimpanya. Upaya pemulihan
+yang sudah dimulai menghabiskan slot, termasuk ketika gagal atau terputus;
+Ember tidak mencoba ulang otomatis. Jika tidak ada snapshot sebelum perubahan,
+tindakan biasa tetap tersedia tetapi undo untuknya tidak tersedia.
+
+Routing tetap memakai Needle dengan threshold dan validasi yang sama. `undo it`
+sudah dipilih dengan benar pada pengujian Windows. Variasi seperti `nevermind
+undo it` dan `undo the volume change` masih dapat ditolak; penambahan tool undo
+belum menyelesaikan seluruh variasi bahasa. Multi-step dan toleransi typo belum
+ditambahkan. Pemeriksaan target berlaku jika Needle mengirim target tersebut;
+pemahaman rujukan yang lebih luas belum dijamin.
+
+Pengujian aplikasi memakai task dan history sementara dari **shell**:
+
+```powershell
+.\venv\Scripts\python.exe scripts/verify_undo.py --output logs/undo.json
+```
+
+Pada Pi, gunakan `./venv/bin/python`. Skrip memakai Needle dan SmolLM asli,
+mengizinkan hanya eksekusi undo atas task sementara, dan memeriksa bahwa undo
+kedua tidak membatalkan tindakan yang lebih lama. Data pengguna dan perangkat
+volume/brightness tidak diubah. Panduan [undo](setup/UNDO.md) mencatat kontrak,
+command evaluasi routing, dan batas pengujian fisik.
 
 ## Pemeliharaan panduan
 

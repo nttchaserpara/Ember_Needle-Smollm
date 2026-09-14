@@ -1,0 +1,15 @@
+[
+  {"query":"undo","expected":{"name":"undo_last_action","arguments":{}}},
+  {"query":"undo it","expected":{"name":"undo_last_action","arguments":{}}},
+  {"query":"nevermind undo it","expected":{"name":"undo_last_action","arguments":{}}},
+  {"query":"undo the last action","expected":{"name":"undo_last_action","arguments":{}}},
+  {"query":"revert the last change","expected":{"name":"undo_last_action","arguments":{}}},
+  {"query":"undo the volume change","expected":{"name":"undo_last_action","arguments":{"target":"volume"}}},
+  {"query":"undo the brightness change","expected":{"name":"undo_last_action","arguments":{"target":"brightness"}}},
+  {"query":"undo the last task","expected":{"name":"undo_last_action","arguments":{"target":"task"}}},
+  {"query":"do not undo the last action","expected":null},
+  {"query":"what does undo mean?","expected":null},
+  {"query":"I undid that yesterday","expected":null},
+  {"query":"set volume to 70 and undo it","expected":null},
+  {"query":"cancel the scheduled shutdown","expected":{"name":"cancel_shutdown","arguments":{}}}
+]

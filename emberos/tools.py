@@ -7,12 +7,15 @@ import logging
 import os
 import subprocess
 import webbrowser
+import threading
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional
 
 from emberos.config import ROOT_DIR
 from emberos.outcomes import ToolOutput
+from emberos.undo import READ_ONLY_TOOLS, UndoManager
 
 logger = logging.getLogger("emberos.tools")
 
@@ -69,6 +72,8 @@ class ToolRegistry:
 
     def __init__(self, memory=None):
         self.memory = memory
+        self._undo = UndoManager()
+        self._action_lock = threading.RLock()
         self._tools: dict[str, ToolDef] = {}
         self._register_builtins()
 
@@ -98,14 +103,26 @@ class ToolRegistry:
 
     def execute_tool(self, name: str, params: dict) -> ToolResult:
         """Execute a registered tool by name."""
+        # Serialize state-changing calls, including undo. This also establishes
+        # an unambiguous last action for callers of execute_parallel().
+        with nullcontext() if name in READ_ONLY_TOOLS else self._action_lock:
+            return self._execute_tool(name, params)
+
+    def _execute_tool(self, name: str, params: dict) -> ToolResult:
         tool = self._tools.get(name)
         if not tool:
             result = ToolResult(success=False, error=f"Unknown tool: {name}")
             _log_tool_call(name, params, result.to_dict())
             return result
 
+        changes_state = name not in READ_ONLY_TOOLS and name != "undo_last_action"
+        started = False
+        capture = None
         try:
             self.validate_arguments(name, params)
+            if changes_state:
+                capture = self._undo.prepare(name, params)
+                started = True
             output = tool.func(**params)
             if isinstance(output, ToolResult):
                 result = output
@@ -126,6 +143,10 @@ class ToolRegistry:
             logger.exception("Tool '%s' failed", name)
             result = ToolResult(success=False, error=str(e))
 
+        # If KeyboardInterrupt escapes, prepare() has already invalidated the
+        # previous slot; no stale action can then be undone.
+        if started:
+            self._undo.complete(name, result, capture)
         _log_tool_call(name, params, result.to_dict())
         return result
 
@@ -179,6 +200,14 @@ class ToolRegistry:
 
     def _register_builtins(self) -> None:
         """Register all built-in tools."""
+
+        self.register(
+            name="undo_last_action",
+            description="Undo the last action performed by Ember, restoring its previous state when supported",
+            parameters={"target": {"type": "string", "enum": ["", "volume", "brightness", "task"],
+                                   "description": "Optional named target kind. Empty means the last action of any kind; never searches older actions."}},
+            func=self._undo.undo,
+        )
 
         self.register(
             name="run_shell",
@@ -1298,15 +1327,17 @@ def _tool_list_tasks(show_all: bool = False) -> str:
 
 
 def _tool_complete_task(task_id: int) -> str:
-    task = _get_task_manager().complete(int(task_id))
+    previous, task = _get_task_manager().complete_with_snapshot(int(task_id))
     if task is None:
         return ToolOutput.failure(f"Task #{task_id} not found or already completed.")
-    return ToolOutput(f"Done! Completed task #{task_id}: {task['title']}.", data=task)
+    return ToolOutput(f"Done! Completed task #{task_id}: {task['title']}.",
+                      data={**task, "previous_task": previous})
 
 
 def _tool_remove_task(task_id: int) -> str:
-    removed = _get_task_manager().remove(int(task_id))
-    return ToolOutput(f"Done! Deleted task #{task_id}.") if removed else ToolOutput.failure(f"Task #{task_id} not found.")
+    previous = _get_task_manager().remove_with_snapshot(int(task_id))
+    return (ToolOutput(f"Done! Deleted task #{task_id}.", data={"task": None, "previous_task": previous})
+            if previous is not None else ToolOutput.failure(f"Task #{task_id} not found."))
 
 
 def _tool_clear_completed_tasks() -> str:

@@ -26,9 +26,10 @@ from emberos.benchmark import RequestMemorySampler
 from emberos.responses import format_tool_response
 from emberos.config import ROOT_DIR
 from emberos.memory import ConversationMemory, memory_command
+from emberos.replies import ReplyRenderer, original_response
 
 
-def handle_request(query, registry, memory=None):
+def handle_request(query, registry, memory=None, *, reply_renderer=None):
     """Keep persistence failures separate from the already executed action."""
     try:
         memory_response = memory_command(query, memory)
@@ -43,8 +44,12 @@ def handle_request(query, registry, memory=None):
     except Exception as exc:
         result = {"route": "error", "response": f"Request failed: {exc}",
                   "status": "error", "success": False}
+    renderer = reply_renderer if reply_renderer is not None else ReplyRenderer()
+    reply = renderer.render(result, query=query, memory=memory)
+    result["display_response"] = reply["text"]
+    result["reply"] = reply
     if memory is not None:
-        response = format_tool_response(result) if result["route"] == "tool_call" else result["response"]
+        response = result.get("display_response") or original_response(result)
         try:
             memory.record(query, response, result)
         except (OSError, sqlite3.Error, ValueError) as exc:
@@ -98,9 +103,12 @@ def main():
         except (OSError, sqlite3.Error, ValueError) as exc:
             print(f"[memory] Conversation memory is unavailable: {exc}")
     registry = ToolRegistry(memory=memory)
+    reply_renderer = ReplyRenderer()
     print("EmberOS (Needle OS Agent) -- type 'exit' to quit")
     _print_benchmark("startup", elapsed=time.perf_counter() - _PROGRAM_STARTED)
-    print("[mode] SmolLM2 Q4 runs on demand via llama.cpp for document summaries and unloads after each job.")
+    print("[mode] SmolLM2 Q4 uses llama.cpp for summaries and short replies. "
+          + ("Persistent worker enabled." if os.environ.get("EMBER_LLM_PERSISTENT", "0") == "1"
+             else "The worker unloads after each generation job."))
     print("[memory] Local conversation history enabled (up to 1,000 turns). Type /memory for recent history."
           if memory is not None else "[memory] Conversation history disabled or unavailable.")
     print("-" * 50)
@@ -121,24 +129,24 @@ def main():
         sample = RequestMemorySampler(_PROCESS)
         try:
             with sample:
-                result = handle_request(query, registry, memory)
+                result = handle_request(query, registry, memory, reply_renderer=reply_renderer)
         except Exception as e:
             print(f"[error] {e}")
             _print_benchmark("failed request", time.perf_counter() - started, rss_before, sample)
             continue
 
         if result["route"] == "tool_call":
-            print(format_tool_response(result))
+            print(result.get("display_response") or format_tool_response(result))
             confidence = result.get("confidence")
             confidence_text = f"{confidence:.2f}" if confidence is not None else "unknown"
             print(f"  [tool={result['tool']} | confidence={confidence_text}]")
         elif result["route"] == "memory_view":
-            print(result["response"])
+            print(result.get("display_response") or result["response"])
         else:
             conf = result.get("needle_confidence")
             conf_str = f"{conf:.2f}" if conf is not None else "None"
             print(f"[route={result['route']} | Needle confidence={conf_str}]")
-            print(result["response"])
+            print(result.get("display_response") or result["response"])
 
         _print_benchmark("request", time.perf_counter() - started, rss_before, sample)
 

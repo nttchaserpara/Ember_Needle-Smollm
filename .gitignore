@@ -15,6 +15,3 @@ runtimes/
 # Keep small input fixtures and routing cases for on-device benchmarks.
 /experiments/*.py
 /experiments/results/
-
-# Unused legacy copy; the active launcher is use_cases/app_launcher.py.
-/app_launcher.py

@@ -334,19 +334,26 @@ def set_brightness(level: int) -> str:
         return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
         script = (
-            "$ErrorActionPreference = 'Stop'; "
+            "$ErrorActionPreference = 'Stop'; try { "
             "$monitors = @(Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods); "
             "if ($monitors.Count -eq 0) { throw 'No controllable display found' }; "
             "foreach ($monitor in $monitors) { "
             "$change = Invoke-CimMethod -InputObject $monitor -MethodName WmiSetBrightness "
-            f"-Arguments @{{Timeout=[uint32]1; Brightness=[byte]{level}}}; "
-            "if ($change.ReturnValue -ne 0) { throw 'Display rejected brightness change' } }; "
+            f"-Arguments @{{Timeout=[uint32]0; Brightness=[byte]{level}}}; "
+            # Some Windows providers return no output properties. Missing is
+            # not a nonzero error code; success still requires readback below.
+            "if ($null -ne $change.ReturnValue -and $change.ReturnValue -ne 0) { "
+            "throw ('Display rejected brightness change (code ' + $change.ReturnValue + ')') } }; "
+            "for ($attempt = 0; $attempt -lt 6; $attempt++) { "
             "$levels = @(Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightness | "
             "Select-Object -ExpandProperty CurrentBrightness); "
-            "@{levels=$levels} | ConvertTo-Json -Compress"
+            f"if ($levels.Count -gt 0 -and @($levels | Where-Object {{ $_ -ne {level} }}).Count -eq 0) {{ break }}; "
+            "if ($attempt -lt 5) { Start-Sleep -Milliseconds 100 } }; "
+            "@{levels=$levels} | ConvertTo-Json -Compress "
+            "} catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }"
         )
         result = subprocess.run(
-            ["powershell", "-Command", script],
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
             capture_output=True, text=True, timeout=10,
         )
         if result.returncode != 0:

@@ -480,6 +480,18 @@ def write_document(path: str, content: str, fmt: str = None):
     pass
 
 
+@needle.tool
+def undo_last_action(target: str = ""):
+    """Undo or reverse the last action performed by Ember and restore its previous state.
+
+    Restore previous volume, mute, brightness, or task state from the recorded
+    last action. target is volume, brightness, or task when explicitly named;
+    otherwise leave it empty. No previous value or task ID is needed. This
+    handles general requests to undo a change; it cannot reach older actions.
+    """
+    pass
+
+
 ALL_TOOLS = [
     run_shell, read_file, write_file, list_dir, get_clipboard, set_clipboard,
     open_file, search_web, get_active_window, close_window, get_system_info,
@@ -497,6 +509,7 @@ ALL_TOOLS = [
     add_task, list_tasks, complete_task, remove_task, clear_completed_tasks,
     create_note, search_notes, search_conversation_history,
     batch_read_folder, folder_explain, write_document, create_spreadsheet, create_google_doc,
+    undo_last_action,
 ]
 
 needle_agent = needle.Needle(tools=ALL_TOOLS, tool_index_path="tools.idx")
@@ -613,7 +626,9 @@ def _known_intent_call(query: str) -> dict | None:
         re.IGNORECASE,
     )
 
-    _DOC_EXT = r"pdf|docx|xlsx|pptx|txt|md|csv"
+    # Include legacy Word references so the reader can report the actual
+    # format limitation without asking the model to regenerate a long path.
+    _DOC_EXT = r"pdf|docx|doc|xlsx|pptx|txt|md|csv"
 
     quoted_path_match = re.search(
         rf'''["']([^"']+\.(?:{_DOC_EXT}))["']''',
@@ -691,6 +706,9 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
 
     tool_registry: instance dari emberos.tools.ToolRegistry (real EmberOS)
     """
+    history_help = ("I couldn't reliably interpret this conversation-history request. "
+                    "Use /memory to view recent conversations, or /memory search <topic> "
+                    "to search saved messages.")
     history_requested = False
     if getattr(tool_registry, "memory", None) is not None:
         from emberos.history_routing import select_history
@@ -714,7 +732,7 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
                     or proposals[0].get("arguments") != {}
                     or confidence is None or confidence < CONFIDENCE_THRESHOLD):
                 return {"route": "unresolved_tool_request", "needle_confidence": confidence,
-                        "response": "I couldn't reliably interpret this conversation-history request.",
+                        "response": history_help,
                         "reason": "uncertain_history_request", "truncated": False}
             history_requested = True
 
@@ -751,7 +769,7 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
 
     calls = result.get("function_calls") or []
     if history_requested and (len(calls) != 1 or calls[0].get("name") != "search_conversation_history"):
-        return unresolved("I couldn't reliably interpret this conversation-history request.", "conflicting_history_route")
+        return unresolved(history_help, "conflicting_history_route")
     if len(calls) > 1:
         return unresolved("This request needs multiple actions. Please ask for one action at a time for now.", "multiple_actions")
     has_match = bool(calls)
@@ -761,6 +779,16 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
     )
 
     if has_match and not confident:
+        # A format explanation does not execute the low-confidence proposal.
+        # Require the selected summary tool and exact grounded file reference;
+        # native negation, grounding and compound-call checks still apply.
+        if (known_call and known_call["name"] == "summarize_file"
+                and Path(known_call["arguments"]["path"]).suffix.lower() == ".doc"
+                and path_alias and calls[0].get("name") == "summarize_file"
+                and calls[0].get("arguments") == {"path": path_alias}):
+            from use_cases.file_analysis import legacy_word_unavailable
+            return unresolved(str(legacy_word_unavailable(known_call["arguments"]["path"])),
+                              "unsupported_document_format")
         # Needle found a tool, but its calibrated confidence says not to act.
         # SmolLM2 cannot inspect the OS, so generating an answer here would
         # fabricate system state instead of safely declining the tool call.
