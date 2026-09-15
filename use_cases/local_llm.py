@@ -19,27 +19,40 @@ MODEL_PATH = ROOT_DIR / "models" / "SmolLM2-135M-Instruct-Q4_K_M.gguf"
 _JOB_LOCK = threading.Lock()
 
 _PERSISTENT = os.environ.get("EMBER_LLM_PERSISTENT", "0") == "1"
-_SHARED = {"process": None, "base_url": None, "api_key": None, "log": None}
+_SHARED = {"process": None, "base_url": None, "api_key": None, "log": None, "config": None}
 _SHARED_LOCK = threading.Lock()
+
+
+def _stop_process(process):
+    if process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+    else:
+        process.wait()
 
 
 def _shutdown_shared_server():
     with _SHARED_LOCK:
-        process = _SHARED.get("process")
-        if process is not None and process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=5)
-        log = _SHARED.get("log")
-        if log is not None:
-            log.close()
+        try:
+            if _SHARED["process"] is not None:
+                _stop_process(_SHARED["process"])
+        finally:
+            if _SHARED["log"] is not None:
+                _SHARED["log"].close()
+            _SHARED.update(dict.fromkeys(_SHARED))
 
 
-if _PERSISTENT:
-    atexit.register(_shutdown_shared_server)
+def shutdown_shared_worker():
+    """Release the optional persistent worker once all generation jobs finish."""
+    with _JOB_LOCK:
+        _shutdown_shared_server()
+
+
+atexit.register(_shutdown_shared_server)
 
 
 class GenerationError(RuntimeError):
@@ -55,7 +68,7 @@ class LocalTextClient:
 
     def __init__(self, model_path=None, server_path=None, context_size=None,
                  threads=None, request_timeout=None, startup_timeout=None,
-                 job_timeout=None, grounding_rule=None):
+                 job_timeout=None, grounding_rule=None, persistent=None, sleep_idle=None):
         self.model_path = Path(model_path or os.environ.get("EMBER_MODEL_PATH", MODEL_PATH)).expanduser().resolve()
         self.server_path = server_path or os.environ.get("EMBER_LLAMA_SERVER")
         self.context_size = int(context_size or os.environ.get("EMBER_LLM_CONTEXT", 2048))
@@ -64,6 +77,10 @@ class LocalTextClient:
         self.startup_timeout = float(startup_timeout or os.environ.get("EMBER_LLM_STARTUP_TIMEOUT", 120))
         self.job_timeout = float(job_timeout if job_timeout is not None else os.environ.get("EMBER_LLM_JOB_TIMEOUT", 600))
         self.grounding_rule = self._GROUNDING_RULE if grounding_rule is None else grounding_rule
+        self.persistent = _PERSISTENT if persistent is None else persistent
+        self.sleep_idle = int(sleep_idle if sleep_idle is not None else os.environ.get("EMBER_LLM_SLEEP_IDLE", 90))
+        if self.sleep_idle != -1 and self.sleep_idle < 1:
+            raise ValueError("EMBER_LLM_SLEEP_IDLE must be positive seconds or -1 to disable sleep")
         if self.context_size < 512 or self.threads < 1 or min(self.request_timeout, self.startup_timeout, self.job_timeout) <= 0:
             raise ValueError("Context must be >= 512; threads and timeouts must be positive")
         self.process = None
@@ -74,6 +91,7 @@ class LocalTextClient:
         self._api_key = secrets.token_hex(24)
         self._http = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         self.last_generation = None
+        self._broken = False
 
     def __enter__(self):
         if self._active:
@@ -85,31 +103,34 @@ class LocalTextClient:
         return self
 
     def __exit__(self, exc_type, exc, traceback):
-        self.close()
+        self.close(discard=exc_type is not None)
 
-    def close(self):
+    def close(self, *, discard=False):
         try:
-            if not _PERSISTENT and self.process is not None:
-                if self.process.poll() is None:
-                    self.process.terminate()
-                    try:
-                        self.process.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        self.process.kill()
-                        self.process.wait(timeout=5)
+            if self.process is not None:
+                with _SHARED_LOCK:
+                    shared = _SHARED["process"] is self.process
+                if shared:
+                    if discard or self._broken or not self.persistent:
+                        _shutdown_shared_server()
                 else:
-                    self.process.wait()
+                    # Includes persistent workers that failed before readiness.
+                    try:
+                        _stop_process(self.process)
+                    finally:
+                        if self._log is not None:
+                            self._log.close()
+            elif self._log is not None:
+                self._log.close()
         finally:
-            if not _PERSISTENT:
-                self.process = None
-                if self._log is not None:
-                    self._log.close()
-                    self._log = None
-                self._base_url = None
+            self.process = None
+            self._log = None
+            self._base_url = None
+            self._broken = False
             atexit.unregister(self.close)
             if self._active:
                 self._active = False
-                _JOB_LOCK.release()  
+                _JOB_LOCK.release()
 
     def _server_binary(self):
         if self.server_path:
@@ -148,27 +169,32 @@ class LocalTextClient:
             with self._http.open(request, timeout=self._remaining(timeout or self.request_timeout)) as response:
                 return json.load(response)
         except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+            # A timed-out generation may still be running in the server.
+            # Discard that worker on close instead of reusing an unknown job.
+            self._broken = True
             raise GenerationError(f"Local model request failed at {route}: {exc}") from exc
 
     def _start(self):
-        if _PERSISTENT:
-            with _SHARED_LOCK:
-                process = _SHARED.get("process")
-                if process is not None and process.poll() is None:
-                    self.process = process
-                    self._base_url = _SHARED["base_url"]
-                    self._api_key = _SHARED["api_key"]
-                    return
-
+        if not self._active:
+            raise RuntimeError("Start a generation job before loading the model")
         if self.process is not None:
             if self.process.poll() is not None:
                 raise GenerationError("The local model worker exited unexpectedly")
             return
-        if not self._active:
-            raise RuntimeError("Start a generation job before loading the model")
         if not self.model_path.is_file():
             raise GenerationError("Model missing. Run python scripts/setup_local_llm.py --model-only.")
         binary = self._server_binary()
+        config = (binary, str(self.model_path), self.context_size, self.threads, self.sleep_idle)
+        if self.persistent:
+            with _SHARED_LOCK:
+                process = _SHARED.get("process")
+                if process is not None and process.poll() is None and _SHARED["config"] == config:
+                    self.process = process
+                    self._base_url = _SHARED["base_url"]
+                    self._api_key = _SHARED["api_key"]
+                    return
+        # Reap dead/incompatible shared workers before another model is loaded.
+        _shutdown_shared_server()
         with socket.socket() as reservation:
             reservation.bind(("127.0.0.1", 0))
             port = reservation.getsockname()[1]
@@ -181,8 +207,8 @@ class LocalTextClient:
             "--api-key", self._api_key, "-c", str(self.context_size), "-t", str(self.threads),
             "-np", "1", "-b", "128", "-ub", "64", "-ngl", "0", "--no-context-shift",
         ]
-        if _PERSISTENT:
-            command += ["--sleep-idle-seconds", os.environ.get("EMBER_LLM_SLEEP_IDLE", "90")]
+        if self.persistent:
+            command += ["--sleep-idle-seconds", str(self.sleep_idle)]
         options = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
         self.process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=self._log,
                                         stderr=subprocess.STDOUT, shell=False, **options)
@@ -192,10 +218,11 @@ class LocalTextClient:
                 raise GenerationError(f"llama-server failed to start; see {log_path}")
             try:
                 if self._request("/health", timeout=1).get("status") == "ok":
-                    if _PERSISTENT:
+                    self._broken = False
+                    if self.persistent:
                         with _SHARED_LOCK:
                             _SHARED.update(process=self.process, base_url=self._base_url,
-                                          api_key=self._api_key, log=self._log)
+                                          api_key=self._api_key, log=self._log, config=config)
                     return
             except GenerationError:
                 pass

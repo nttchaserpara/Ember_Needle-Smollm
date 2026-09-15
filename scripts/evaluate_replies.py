@@ -16,21 +16,41 @@ import psutil
 
 from emberos.benchmark import RequestMemorySampler
 from emberos.memory import ConversationMemory
-from emberos.replies import ReplyRenderer
+from emberos.replies import ReplyRenderer, original_response, validate_reply, _source
 from emberos.tools import ToolRegistry
 from run_ember import handle_request
+
+
+def check_rejected_candidates(cases):
+    """Replay captured false acceptances even when model output changes."""
+    checks = []
+    for case in cases:
+        source, _ = _source(case["result"], original_response(case["result"]))
+        for candidate in case.get("rejected_candidates", []):
+            reason = validate_reply(candidate, source, case["result"])
+            checks.append({"id": case["id"], "candidate": candidate,
+                           "rejection_reason": reason, "passed": bool(reason)})
+    return checks
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--case", help="Run a single case ID from experiments/reply_cases.json")
+    parser.add_argument("--validation-only", action="store_true", help="Replay captured invalid replies without loading SmolLM")
     args = parser.parse_args()
     cases = json.loads((Path(__file__).resolve().parents[1] / "experiments/reply_cases.json").read_text(encoding="utf-8"))
     if args.case:
         cases = [case for case in cases if case["id"] == args.case]
         if not cases:
             parser.error("Unknown --case ID")
+    regressions = check_rejected_candidates(cases)
+    if args.validation_only:
+        report = {"validation_regressions": regressions, "passed": all(row["passed"] for row in regressions)}
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        print(f"{sum(row['passed'] for row in regressions)}/{len(regressions)} invalid replies rejected. Report: {args.output}")
+        return 0 if report["passed"] else 1
     renderer = ReplyRenderer()
     results = []
     process = psutil.Process()
@@ -70,11 +90,12 @@ def main():
               "fallbacks": sum(row["generation_expected"] and row["reply"]["source"] != "smollm2" for row in results),
               "passed": sum(row["generation_expectation_met"] and row["execution_and_storage_checks_passed"] for row in results),
               "total": len(results), "results": results,
+              "validation_regressions": regressions,
               "limitation": "Output checks are not a proof of semantic equivalence. Review originals and candidates; Windows is not a Pi measurement."}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"{report['generated']} generated, {report['fallbacks']} guarded/runtime fallbacks. Report: {args.output}")
-    return 0 if report["passed"] == report["total"] else 1
+    return 0 if report["passed"] == report["total"] and all(row["passed"] for row in regressions) else 1
 
 
 if __name__ == "__main__":

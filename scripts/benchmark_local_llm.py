@@ -91,6 +91,9 @@ def main():
                 )
             result, routing_diagnostics = run_document_job(document, args.direct_tool)
     finally:
+        children_after_job = [child.pid for child in process.children(recursive=True)]
+        from use_cases.local_llm import shutdown_shared_worker
+        shutdown_shared_worker()
         stop.set()
         monitor.join(timeout=2)
     stats.update({
@@ -108,6 +111,8 @@ def main():
         "system_swap_change_mib": (psutil.swap_memory().used - swap_before) / 2**20,
         "observed_child_pids": sorted(child_ids),
         "children_still_running": [child.pid for child in process.children(recursive=True)],
+        "children_after_job_before_shutdown": children_after_job,
+        "persistent_worker": os.environ.get("EMBER_LLM_PERSISTENT", "0") == "1",
         "torch_imported": "torch" in sys.modules,
         "transformers_imported": "transformers" in sys.modules,
         "result": result,

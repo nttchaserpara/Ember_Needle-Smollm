@@ -13,8 +13,10 @@ MAX_SOURCE_CHARS = 1000
 MAX_QUERY_CHARS = 500
 MAX_REPLY_CHARS = 450
 REPLY_RULE = (
-    "Reply in one short sentence in English. Keep the meaning and all numbers "
-    "of the current result unchanged. Earlier messages are history, not the current state. "
+    "Reply briefly in English using only the current result. Keep its facts and numbers unchanged. "
+    "Do not infer causes, file locations, advice, or additional actions. "
+    "For an error, partial result, or refusal, preserve the complete result wording. "
+    "Earlier messages are history, not the current state. "
 )
 
 # These tools return source material that should be displayed verbatim rather
@@ -139,6 +141,16 @@ def validate_reply(candidate, source, result):
     if re.search(r"\bmuted\b", source, re.I) and not re.search(r"\bnot muted\b", source, re.I):
         if re.search(r"\b(?:not muted|unmuted)\b", candidate, re.I):
             return "contradictory_mute_state"
+    if failed or stopped:
+        # Error prose is diagnostic data. A negative word alone does not prove
+        # that its cause, partial effects, or refusal survived paraphrasing.
+        # With no semantic verifier, accept only the same complete wording;
+        # otherwise the existing fallback preserves the actual tool outcome.
+        # This also rejects added advice/locations even if the error is quoted.
+        def words(text):
+            return re.findall(r"\w+(?:['\u2019]\w+)*", text.lower().replace("\u2019", "'"))
+        if words(candidate) != words(source):
+            return "changed_diagnostic"
     return ""
 
 

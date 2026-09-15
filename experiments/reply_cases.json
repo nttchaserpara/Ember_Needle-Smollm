@@ -68,7 +68,10 @@
         "path": "notes/12.txt"
       }
     },
-    "query": "save a note and open it in Notepad"
+    "query": "save a note and open it in Notepad",
+    "rejected_candidates": [
+      "The note was not saved to notes/12.txt, and Notepad could not be opened."
+    ]
   },
   {
     "id": "volume_read",
@@ -104,7 +107,12 @@
       "status": "error",
       "error": "Could not delete report.txt: permission denied."
     },
-    "query": "delete report.txt"
+    "query": "delete report.txt",
+    "rejected_candidates": [
+      "The error message \"could not delete report.txt: permission denied\" indicates that the user is unable to delete the file \"report.txt\". The file \"report.txt\" is located in the same directory as the script, and the file is intended to be deleted. The user needs to ensure that they have permission to delete the file.",
+      "Could not delete report.txt: permission denied because the disk is full.",
+      "Could not delete report.txt: permission denied. Run as administrator."
+    ]
   },
   {
     "id": "no_action",
@@ -239,6 +247,9 @@
           "success": true
         }
       }
+    ],
+    "rejected_candidates": [
+      "The brightness change failed because the brightness change was not a result of the brightness setting."
     ]
   },
   {
@@ -352,6 +363,9 @@
       "status": "error",
       "arguments": {},
       "error": "Undo was not applied: The audio device or its settings changed after the last action."
-    }
+    },
+    "rejected_candidates": [
+      "Undo was not applied: The audio device is broken."
+    ]
   }
 ]
