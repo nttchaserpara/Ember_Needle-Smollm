@@ -145,7 +145,7 @@ def main():
              else "The worker unloads after each generation job."))
     print("[memory] Local conversation history enabled (up to 1,000 turns). Type /memory for recent history."
           if memory is not None else "[memory] Conversation history disabled or unavailable.")
-    print("[multistep] OFF by default. Type /multistep on to allow allowlisted multi-action chains.")
+    print("[multistep] OFF by desfault. Type /multistep on to allow allowlisted multi-action chains.")
     print("-" * 50)
 
     while True:
