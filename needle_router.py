@@ -27,6 +27,8 @@ import platform
 
 import needle
 
+from emberos.undo import READ_ONLY_TOOLS
+
 # ── Core file/system tools ──────────────────────────────────────────
 @needle.tool
 def run_shell(cmd: str):
@@ -482,12 +484,10 @@ def write_document(path: str, content: str, fmt: str = None):
 
 @needle.tool
 def undo_last_action(target: str = ""):
-    """Undo or reverse the last action performed by Ember and restore its previous state.
+    """Undo, revert or reverse the last action. Go back to the previous state or put it back as it was. Undo the volume change, brightness change, or last task.
 
-    Restore previous volume, mute, brightness, or task state from the recorded
-    last action. target is volume, brightness, or task when explicitly named;
-    otherwise leave it empty. No previous value or task ID is needed. This
-    handles general requests to undo a change; it cannot reach older actions.
+    Args:
+        target: The explicitly named target: volume, brightness, or task. Omit when no target is named.
     """
     pass
 
@@ -526,6 +526,34 @@ CONFIDENCE_THRESHOLD = (
 # cases (summarize x2, list_tasks) without affecting the x86 threshold or
 # two unrelated false-positive cases (cpu_temperature misfires at 0.67/0.85,
 # already above any threshold considered here -- separate bug, not fixed here.
+
+# Multi-step mode allowlist. All of READ_ONLY_TOOLS (trivially safe to
+# combine) plus a hand-picked set of write tools that either (a) already have
+# proven undo snapshot/restore -- so a chain-undo can genuinely reach them --
+# or (b) are simple one-way, low-blast-radius actions with no destructive
+# failure mode even without undo. summarize_file is explicitly REMOVED from
+# READ_ONLY_TOOLS here: its path comes from a regex fast-path tied to the
+# whole raw query, which multi-step deliberately skips -- Needle alone
+# extracting a path from a compound sentence is unverified and not worth the
+# risk of a wrong-file summary. Excluded entirely (not a time constraint --
+# an architectural one): delete_file, move_file, rename_file, organize_folder,
+# clear_completed_tasks (irreversible or currently un-backed-up), run_shell,
+# kill_process, shutdown_system, restart_system (system-level, irreversible),
+# undo_last_action (nonsensical inside its own chain), summarize_file,
+# create_note, create_google_doc, create_spreadsheet, write_document (all
+# need long free-text/quoted-content args Needle handles unreliably without
+# the pre-Needle regex parser, which only fires for single, standalone
+# commands).
+MULTISTEP_MODE_ALLOWED = (READ_ONLY_TOOLS - {"summarize_file"}) | {
+    "set_volume", "volume_up", "volume_down", "mute_volume",
+    "set_brightness", "toggle_dark_mode", "set_dark_mode",
+    "add_task", "complete_task", "remove_task",
+    "take_screenshot", "resize_image", "convert_image", "rotate_image",
+    "minimize_all_windows", "focus_window", "close_window",
+    "launch_app", "open_file", "lock_screen", "sleep_system", "cancel_shutdown",
+    "copy_file", "create_directory", "compress_to_zip", "extract_archive",
+}
+
 
 def _user_folder_path(folder_name: str) -> str:
     """Resolve Windows' configured known folder, with a portable fallback."""
@@ -698,43 +726,133 @@ def _execute_call(call: dict, tool_registry, confidence: float | None = None) ->
     return result
 
 
-def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = None):
+def _route_multi_step(calls: list[dict], tool_registry, *, confidence: float | None) -> dict:
+    """Execute a batch of Needle-selected calls in order (multi-step mode only).
+
+    No argument grounding (_known_intent_call, undo-target matching) applies
+    here -- every tool needing it is excluded from MULTISTEP_MODE_ALLOWED by
+    construction (see the comment on that constant).
+
+    Stops at the first failed step. Every successful, undo-capable step is
+    captured into one composite undo entry covering the whole chain, in
+    reverse order -- see ToolRegistry.execute_tool_chain.
+    """
+    bad = next((c["name"] for c in calls if c.get("name") not in MULTISTEP_MODE_ALLOWED), None)
+    if bad is not None:
+        return {
+            "route": "unresolved_tool_request",
+            "needle_confidence": confidence,
+            "reason": "multi_step_unsupported_tool",
+            "response": (
+                f"Multi-step mode doesn't support '{bad}' yet. "
+                "Please ask for one action at a time, or drop that part of the request."
+            ),
+            "truncated": False,
+        }
+    results, composite = tool_registry.execute_tool_chain(calls)
+    tool_registry.install_chain_undo(composite)
+    return {
+        "route": "multi_tool_call",
+        "results": results,
+        "calls": calls,
+        "confidence": confidence,
+        "chain_undo_available": composite is not None,
+        "truncated": False,
+    }
+
+
+# ── Proven-confusion-pair guard ─────────────────────────────────────────────
+
+# Explicit "set/change/turn [the/my] [speaker] volume to N" clause
+_SET_VOLUME_CLAUSE_RE = re.compile(
+    r"\b(?:set|change|turn)\b(?:\s+(?:the|my))?\s+(?:speaker\s+)?volume\s+to\s+(\d+)\b",
+    re.IGNORECASE,
+)
+
+# Relative volume change words -- if present, this is not an absolute set
+_RELATIVE_VOLUME_RE = re.compile(
+    r"\b(?:up|down|increase|decrease|raise|lower|louder|quieter|softer|by)\b",
+    re.IGNORECASE,
+)
+
+
+def _fix_set_volume_misroute(calls: list[dict], query: str) -> list[dict]:
+    """Post-process Needle function_calls to fix proven confusion pair.
+
+    Trigger: keyword 'set' appearing twice in compound queries
+    (once in volume clause, once in display/other clause) causes Needle to
+    misroute 'set volume to N' as volume_down{steps=N}.
+
+    Guard triggers only if:
+      1. Explicit clause 'set/change/turn volume to N' is present in query
+      2. No relative change indicators ('up', 'down', 'by', etc.) are present
+      3. A volume_down or volume_up call was produced with steps == N
+    """
+    if _RELATIVE_VOLUME_RE.search(query):
+        return calls
+
+    match = _SET_VOLUME_CLAUSE_RE.search(query)
+    if not match:
+        return calls
+
+    target_level = int(match.group(1))
+    fixed = []
+    for call in calls:
+        name = call.get("name")
+        args = call.get("arguments", {})
+        if name in ("volume_down", "volume_up") and args.get("steps") == target_level:
+            fixed.append({"name": "set_volume", "arguments": {"level": target_level}})
+        else:
+            fixed.append(call)
+    return fixed
+
+
+def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = None,
+                       multi_step_mode: bool = False):
     """
     Route query lewat Needle. Kalau match & confident -> eksekusi beneran
     lewat ToolRegistry asli EmberOS. Kalau tidak ada tool yang cocok ->
     kembalikan respons OS-agent yang aman tanpa generasi LLM.
 
     tool_registry: instance dari emberos.tools.ToolRegistry (real EmberOS)
+    multi_step_mode: opt-in flag, default False. False = original,
+    single-action-only behavior, byte-for-byte unchanged. True = a confident,
+    allowlisted multi-call request runs as a chain instead of being rejected.
+    Every existing caller (benchmarks, evaluators) doesn't pass this, so
+    nothing about them changes.
     """
     history_help = ("I couldn't reliably interpret this conversation-history request. "
                     "Use /memory to view recent conversations, or /memory search <topic> "
                     "to search saved messages.")
+    if getattr(tool_registry, "memory", None) is None:
+        history_help = ("Conversation history is disabled or unavailable. "
+                        "No live system action was taken for this history request.")
     history_requested = False
-    if getattr(tool_registry, "memory", None) is not None:
-        from emberos.history_routing import select_history
+    # Intent separation must not disappear when history storage is disabled.
+    from emberos.history_routing import select_history
 
-        selected = select_history(query)
-        if diagnostics is not None:
-            diagnostics["history_selection"] = {"model_input": query, "raw_model_result": selected}
-        validation = selected.get("validation") or {}
-        proposals = selected.get("function_calls") or []
-        # The small view may propose live-data tools, but is never allowed to
-        # execute them. A history choice only prevents conflicting live actions;
-        # the main model must still select the tool and supply its arguments.
-        history_proposed = any(call.get("name") == "search_conversation_history" for call in proposals)
-        if history_proposed:
-            if validation.get("negation"):
-                return {"route": "no_action", "needle_confidence": selected.get("confidence"),
-                        "response": "No action taken.", "reason": "negated_request", "truncated": False}
-            confidence = selected.get("confidence")
-            if (selected.get("success") is not True or selected.get("error")
-                    or validation.get("ungrounded") or len(proposals) != 1
-                    or proposals[0].get("arguments") != {}
-                    or confidence is None or confidence < CONFIDENCE_THRESHOLD):
-                return {"route": "unresolved_tool_request", "needle_confidence": confidence,
-                        "response": history_help,
-                        "reason": "uncertain_history_request", "truncated": False}
-            history_requested = True
+    selected = select_history(query)
+    if diagnostics is not None:
+        diagnostics["history_selection"] = {"model_input": query, "raw_model_result": selected}
+    validation = selected.get("validation") or {}
+    proposals = selected.get("function_calls") or []
+    # The small view may propose live-data tools, but is never allowed to
+    # execute them. A history choice only prevents conflicting live actions;
+    # the main model must still select the tool and supply its arguments.
+    history_proposed = any(call.get("name") == "search_conversation_history" for call in proposals)
+    if history_proposed:
+        if validation.get("negation"):
+            return {"route": "no_action", "needle_confidence": selected.get("confidence"),
+                    "response": "No action taken.", "reason": "negated_request", "truncated": False}
+        confidence = selected.get("confidence")
+        if (selected.get("success") is not True or selected.get("error")
+                or validation.get("ungrounded") or len(proposals) != 1
+                or proposals[0].get("arguments") != {}
+                or confidence is None or confidence < CONFIDENCE_THRESHOLD):
+            return {"route": "unresolved_tool_request", "needle_confidence": confidence,
+                    "response": history_help,
+                    "reason": "uncertain_history_request", "truncated": False}
+        history_requested = True
 
     known_call = _known_intent_call(query)
     model_query = query
@@ -768,9 +886,10 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
                           "ungrounded_arguments")
 
     calls = result.get("function_calls") or []
+    calls = _fix_set_volume_misroute(calls, query)
     if history_requested and (len(calls) != 1 or calls[0].get("name") != "search_conversation_history"):
         return unresolved(history_help, "conflicting_history_route")
-    if len(calls) > 1:
+    if len(calls) > 1 and not multi_step_mode:
         return unresolved("This request needs multiple actions. Please ask for one action at a time for now.", "multiple_actions")
     has_match = bool(calls)
     confident = (
@@ -815,6 +934,11 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
             "truncated": truncated,
         }
 
+    if len(calls) > 1:
+        # multi_step_mode is guaranteed True here -- the mode-off case
+        # already returned above, before this confidence check even ran.
+        return _route_multi_step(calls, tool_registry, confidence=result["confidence"])
+
     call = calls[0]
     # Existing exact-content parsers may preserve quoted paths/JSON only after
     # the model selects the same tool and passes confidence/native validation.
@@ -827,4 +951,19 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
         tool_registry.validate_arguments(call.get("name"), call.get("arguments"))
     except (TypeError, ValueError) as exc:
         return unresolved(f"I need valid tool arguments before I can continue: {exc}", "invalid_arguments")
+    if call["name"] == "undo_last_action":
+        # Argument grounding only, after Needle has selected one confident,
+        # affirmative undo call. This cannot turn a refusal or another tool
+        # into undo. Preserve an explicitly supplied enum value just as the
+        # document path above is preserved, without matching undo synonyms.
+        allowed = tool_registry.get_tool("undo_last_action").parameters["target"]["enum"]
+        words = set(re.findall(r"\b\w+\b", query.casefold()))
+        targets = [value for value in allowed if value and value in words]
+        target = call["arguments"].get("target", "")
+        if len(targets) > 1:
+            return unresolved("Undo can restore only one last action. Please name a single target.", "ambiguous_undo_target")
+        if target and targets != [target]:
+            return unresolved("I couldn't match the undo target to your request. Please name the target explicitly.", "ungrounded_undo_target")
+        if targets:
+            call = {**call, "arguments": {**call["arguments"], "target": targets[0]}}
     return _execute_call(call, tool_registry, confidence=result["confidence"])

@@ -29,7 +29,24 @@ from emberos.memory import ConversationMemory, memory_command
 from emberos.replies import ReplyRenderer, original_response
 
 
-def handle_request(query, registry, memory=None, *, reply_renderer=None):
+def _format_multi_tool_response(result):
+    """Render a multi_tool_call result without SmolLM -- natural-reply
+    generation for multi-result outcomes is deferred to a later pass.
+    """
+    lines = []
+    for item in result.get("results", []):
+        if item.get("route") == "skipped":
+            lines.append(f"[SKIPPED] {item.get('tool')} (an earlier step failed)")
+            continue
+        lines.append(format_tool_response(item))
+    if result.get("chain_undo_available"):
+        lines.append("(This whole chain can be undone with 'undo'.)")
+    else:
+        lines.append("(Nothing in this chain can be undone.)")
+    return "\n".join(lines)
+
+
+def handle_request(query, registry, memory=None, *, reply_renderer=None, multi_step_mode=False):
     """Keep persistence failures separate from the already executed action."""
     try:
         memory_response = memory_command(query, memory)
@@ -40,14 +57,30 @@ def handle_request(query, registry, memory=None, *, reply_renderer=None):
         # and displaying history must not recursively fill the history.
         return {"route": "memory_view", "response": memory_response}
     try:
-        result = route_and_execute(query, registry)
+        result = route_and_execute(query, registry, multi_step_mode=multi_step_mode)
     except Exception as exc:
         result = {"route": "error", "response": f"Request failed: {exc}",
                   "status": "error", "success": False}
-    renderer = reply_renderer if reply_renderer is not None else ReplyRenderer()
-    reply = renderer.render(result, query=query, memory=memory)
-    result["display_response"] = reply["text"]
-    result["reply"] = reply
+    if result.get("route") == "multi_tool_call":
+        # Skip ReplyRenderer for now: _source()/validate_reply() assume one
+        # tool and one outcome, not a list of them. Revisit in a later pass.
+        display_response = _format_multi_tool_response(result)
+        result["display_response"] = display_response
+        result["reply"] = {"text": display_response, "original": display_response,
+                           "candidate": "", "source": "original",
+                           "reason": "multi_step_not_generated",
+                           "elapsed_seconds": 0.0, "generation": None,
+                           "history_turn_ids": []}
+        result["tool"] = "+".join(
+            item["tool"] for item in result.get("results", [])
+            if item.get("route") == "tool_call" and item.get("tool")
+        )
+        result["arguments"] = result.get("calls")
+    else:
+        renderer = reply_renderer if reply_renderer is not None else ReplyRenderer()
+        reply = renderer.render(result, query=query, memory=memory)
+        result["display_response"] = reply["text"]
+        result["reply"] = reply
     if memory is not None:
         response = result.get("display_response") or original_response(result)
         try:
@@ -104,6 +137,7 @@ def main():
             print(f"[memory] Conversation memory is unavailable: {exc}")
     registry = ToolRegistry(memory=memory)
     reply_renderer = ReplyRenderer()
+    multistep_enabled = False
     print("EmberOS (Needle OS Agent) -- type 'exit' to quit")
     _print_benchmark("startup", elapsed=time.perf_counter() - _PROGRAM_STARTED)
     print("[mode] SmolLM2 Q4 uses llama.cpp for summaries and short replies. "
@@ -111,6 +145,7 @@ def main():
              else "The worker unloads after each generation job."))
     print("[memory] Local conversation history enabled (up to 1,000 turns). Type /memory for recent history."
           if memory is not None else "[memory] Conversation history disabled or unavailable.")
+    print("[multistep] OFF by default. Type /multistep on to allow allowlisted multi-action chains.")
     print("-" * 50)
 
     while True:
@@ -123,13 +158,25 @@ def main():
             continue
         if query.lower() in ("exit", "quit"):
             break
+        if query.lower() == "/multistep on":
+            multistep_enabled = True
+            print("[multistep] ON -- allowlisted multi-action chains enabled.")
+            continue
+        if query.lower() == "/multistep off":
+            multistep_enabled = False
+            print("[multistep] OFF -- back to one action per request.")
+            continue
+        if query.lower() == "/multistep":
+            print(f"[multistep] currently {'ON' if multistep_enabled else 'OFF'}.")
+            continue
 
         rss_before, _ = _memory_snapshot()
         started = time.perf_counter()
         sample = RequestMemorySampler(_PROCESS)
         try:
             with sample:
-                result = handle_request(query, registry, memory, reply_renderer=reply_renderer)
+                result = handle_request(query, registry, memory, reply_renderer=reply_renderer,
+                                        multi_step_mode=multistep_enabled)
         except Exception as e:
             print(f"[error] {e}")
             _print_benchmark("failed request", time.perf_counter() - started, rss_before, sample)
@@ -140,6 +187,13 @@ def main():
             confidence = result.get("confidence")
             confidence_text = f"{confidence:.2f}" if confidence is not None else "unknown"
             print(f"  [tool={result['tool']} | confidence={confidence_text}]")
+        elif result["route"] == "multi_tool_call":
+            print(result.get("display_response"))
+            ran = sum(1 for item in result.get("results", []) if item.get("route") != "skipped")
+            total = len(result.get("calls", []))
+            confidence = result.get("confidence")
+            confidence_text = f"{confidence:.2f}" if confidence is not None else "unknown"
+            print(f"  [multi-step: {ran}/{total} steps ran | confidence={confidence_text}]")
         elif result["route"] == "memory_view":
             print(result.get("display_response") or result["response"])
         else:

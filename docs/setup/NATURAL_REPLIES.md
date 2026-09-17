@@ -1,6 +1,6 @@
 # Natural replies
 
-Updated 14 September 2026. Short outcomes automatically use the existing
+Updated 15 September 2026. Short outcomes automatically use the existing
 SmolLM2-135M-Instruct Q4_K_M through llama.cpp. Needle selects the tool, the
 executor returns its outcome, then SmolLM writes the response. If generation
 fails or output checks reject it, the original response is used automatically.
@@ -59,6 +59,12 @@ at zero to avoid adding randomness purely for variety.
   selected structured facts, failure/refusal markers and some action claims.
   Generated status labels are rejected; code supplies the actual outcome label.
   These checks do **not** prove semantic equivalence.
+- Error, partial, and refusal outcomes must retain the complete original
+  wording (case, spacing and punctuation may differ). A negative word alone
+  does not preserve a diagnosis. Added explanations, advice, or file locations
+  therefore trigger fallback, even if the candidate also quotes the error.
+  This deliberately limits paraphrasing of diagnostic data; successful short
+  outcomes still support natural wording with the existing fact checks.
 - The displayed answer is saved once. The tool status, arguments and result
   remain intact. Presentation and storage failures cannot re-execute an action.
 
@@ -119,4 +125,20 @@ the model claim success for a current failure; output checks rejected that
 case. Context support therefore does not establish general understanding.
 Generation took 1.28-2.27 seconds with peak agent/worker RSS of 250.46 MiB and
 no remaining workers (`logs/replies-context-2026-09-14.json`, local report).
-Physical Pi validation is still pending.
+Physical Pi validation was still pending at that point.
+
+The supplied Pi run on 15 September completed the application reply pipeline,
+with 10 generated replies and 7 fallbacks among 17 eligible cases. However,
+accepted deletion/brightness errors added an unsupported location or replaced
+the cause. Those were false acceptances, not successful factual paraphrases.
+The diagnostic check above closes that observed gap. Captured bad candidates
+are permanent fixtures, replayed regardless of future model output:
+
+```sh
+./venv/bin/python scripts/evaluate_replies.py --validation-only --output logs/pi-reply-guards.json
+```
+
+The full evaluator also runs these checks and reports them under
+`validation_regressions`. It still reports generation coverage separately;
+falling back accurately must not be presented as improved generation quality.
+Current results and remaining limitations: [Pi validation](PI_VALIDATION.md).

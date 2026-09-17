@@ -7,7 +7,7 @@
   {"query":"undo the volume change","expected":{"name":"undo_last_action","arguments":{"target":"volume"}}},
   {"query":"undo the brightness change","expected":{"name":"undo_last_action","arguments":{"target":"brightness"}}},
   {"query":"undo the last task","expected":{"name":"undo_last_action","arguments":{"target":"task"}}},
-  {"query":"do not undo the last action","expected":null},
+  {"query":"do not undo the last action","expected":null,"expected_route":"no_action"},
   {"query":"what does undo mean?","expected":null},
   {"query":"I undid that yesterday","expected":null},
   {"query":"set volume to 70 and undo it","expected":null},

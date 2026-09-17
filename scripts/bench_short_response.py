@@ -131,7 +131,8 @@ def run_mode(mode, cases, count, sleep_idle, idle_grace):
                     warm["after"]["children_rss_mib"] - report["minimum_sleeping_worker_rss_mib"])
             pid = report["idle_worker_pid"]
             report["same_worker_reused"] = all(
-                [child["pid"] for child in row["after"]["children"]] == [pid]
+                # Windows may also attach a hidden console-host descendant.
+                pid in {child["pid"] for child in row["after"]["children"]}
                 for row in report["calls"])
             report["checks_passed"] = report["sleep_observed"] and report["same_worker_reused"] and wake["generation_completed"]
     except (GenerationError, OSError, ValueError, psutil.Error) as exc:

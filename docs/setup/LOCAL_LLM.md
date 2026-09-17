@@ -117,12 +117,6 @@ The routing evaluation records decisions without executing real tools. Several
 non-action inputs still trigger incorrect proposed actions; inspect this report
 before experimenting with arbitrary conversation in the interactive agent.
 
-Next measure actual document jobs, one at a time:
-
-The routing evaluation records decisions without executing real tools. Several
-non-action inputs still trigger incorrect proposed actions; inspect this report
-before experimenting with arbitrary conversation in the interactive agent.
-
 ### ARM confidence gap and platform-aware threshold
 
 Needle's native inference binary is compiled per architecture. On this
@@ -131,8 +125,9 @@ scores measurably lower confidence than on x86 Windows for identical input
 and identical selected function call -- confirmed by comparing
 `routing_diagnostics.raw_model_result` across platforms (10 Sep 2026):
 `summarize_file` scored confidence 0.2782 on Pi vs 0.67 on Windows for the
-same query and arguments. This is a scoring-calibration difference, not a
-routing correctness difference.
+same query and arguments. This example demonstrates a confidence difference
+for a matching call; it does not establish that all cross-platform routing
+differences are calibration alone.
 
 `needle_router.py` now selects `CONFIDENCE_THRESHOLD` based on
 `platform.machine()`: 0.27 on `aarch64`/`armv7l`/`armv6l`, 0.5 elsewhere. The
@@ -270,10 +265,63 @@ bounded conversation context, the separate 45-second reply budget and Pi evaluat
 | `EMBER_LLM_TIMEOUT` | `180` seconds | Individual HTTP request timeout |
 | `EMBER_LLM_STARTUP_TIMEOUT` | `120` seconds | Worker startup timeout |
 | `EMBER_LLM_JOB_TIMEOUT` | `600` seconds | Whole model job budget |
+| `EMBER_LLM_PERSISTENT` | `0` | `1` reuses a worker across generation jobs |
+| `EMBER_LLM_SLEEP_IDLE` | `90` seconds | Idle sleep in persistent mode; positive integer or `-1` to disable |
 
 Use an absolute path for overrides that must work from any working directory.
 The worker is local only; it does not connect to a cloud service or an externally
 managed model server. The process is serialized across local document jobs.
+
+## Persistent worker and sleep measurement
+
+The default still stops and reaps the worker after each generation job.
+`EMBER_LLM_PERSISTENT=1` keeps one worker between jobs and passes
+`--sleep-idle-seconds` to the server. Reuse requires the same native executable,
+model path, context, thread count and idle setting. A failed startup, aborted
+job or HTTP failure is cleaned up; a worker of unknown state is not reused.
+The shared worker is stopped when the application exits.
+
+In llama.cpp b7898, sleep unloads the model and associated memory, including
+the KV cache; requests wake it automatically. `/props` exposes `is_sleeping`.
+Reading `/props` or `/health` neither wakes the model nor resets its idle timer.
+See [the pinned server documentation](https://github.com/ggml-org/llama.cpp/blob/b7898/tools/server/README.md#sleeping-on-idle).
+Actual RSS release and wake cost depend on the runtime/build/OS and need direct
+measurement. Sleep does not terminate the server process or guarantee zero RSS.
+
+The supplied Pi document benchmarks ran one request and immediately reported
+processes. The retained child under persistent mode was expected and did not
+test sleep. The document benchmark now records children immediately after the
+job separately from children after explicit worker shutdown.
+
+The maintained reply benchmark uses the actual `ReplyRenderer` and
+`LocalTextClient` in both residency modes. It supports Windows and Linux path
+discovery and uses only `llama-server`; no `llama-cli`, hardcoded Pi paths,
+fixed port, separate HTTP library or additional build target is needed.
+The old root entry point forwards to the same script:
+
+```sh
+./venv/bin/python scripts/bench_short_response.py --mode both --n 10 --output logs/pi-worker-modes.json
+./venv/bin/python scripts/bench_short_response.py --mode sleep-wake --sleep-idle 90 --output logs/pi-sleep-90.json
+./venv/bin/python scripts/bench_short_response.py --mode sleep-wake --sleep-idle 30 --output logs/pi-sleep-30.json
+```
+
+The last two commands each run identical cold/warm/wake prompts. They sample
+RSS and sleeping state every second for the threshold plus 15 seconds, record
+worker identity and wake-minus-warm time, then terminate and reap the worker.
+If the runtime lacks `is_sleeping`, never sleeps, fails generation or leaves
+children after cleanup, the benchmark reports failure instead of inferring
+successful sleep from a flag passed at startup. Inspect the RSS drop even when
+sleep is reported: the state flag alone does not prove memory was reclaimed.
+
+Needle is loaded for parent RSS accounting, but no routing/tool actions are run.
+Fixture histories use temporary databases. The report preserves candidate and
+fallback details; generation completion is separate from reply correctness.
+RSS sums can include shared pages and Windows console-host descendants.
+
+The 90-second default is retained pending a Pi sleep/wake comparison. Choosing
+30 seconds from desktop timings would not establish a useful Pi latency/RAM
+tradeoff. For predictable release after every conversational turn, the default
+non-persistent mode already releases the worker immediately.
 
 ## Tests and benchmark
 

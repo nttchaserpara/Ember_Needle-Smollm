@@ -15,7 +15,7 @@ from typing import Any, Callable, Optional
 
 from emberos.config import ROOT_DIR
 from emberos.outcomes import ToolOutput
-from emberos.undo import READ_ONLY_TOOLS, UndoManager
+from emberos.undo import READ_ONLY_TOOLS, UndoManager, UndoEntry
 
 logger = logging.getLogger("emberos.tools")
 
@@ -197,6 +197,98 @@ class ToolRegistry:
                     results[idx] = ToolResult(success=False, error=str(e))
 
         return results
+
+    def execute_tool_chain(self, calls: list[dict]) -> tuple[list[dict], "UndoEntry | None"]:
+        """Run several tool calls in sequence as one atomic-undo unit.
+
+        Stops at the first failed call; remaining calls are reported as
+        skipped, not executed. Successful state-changing steps are NOT
+        installed into the single undo slot individually -- this returns one
+        composite UndoEntry (or None if nothing in the chain was undoable)
+        that restores every successful step in reverse order. The caller
+        installs it via install_chain_undo().
+        """
+        with self._action_lock:
+            results: list[dict] = []
+            chain_entries: list[UndoEntry] = []
+            stopped = False
+            for call in calls:
+                name, params = call.get("name"), call.get("arguments") or {}
+                if stopped:
+                    results.append({"route": "skipped", "tool": name, "arguments": params})
+                    continue
+
+                tool = self._tools.get(name)
+                if not tool:
+                    result = ToolResult(success=False, error=f"Unknown tool: {name}")
+                    results.append({"route": "tool_call", "tool": name, "arguments": params,
+                                    **result.to_dict()})
+                    _log_tool_call(name, params, result.to_dict())
+                    stopped = True
+                    continue
+
+                changes_state = name not in READ_ONLY_TOOLS and name != "undo_last_action"
+                capture = None
+                try:
+                    self.validate_arguments(name, params)
+                    if changes_state:
+                        capture = self._undo.prepare(name, params)
+                    output = tool.func(**params)
+                    if isinstance(output, ToolResult):
+                        result = output
+                    elif isinstance(output, ToolOutput):
+                        result = ToolResult(
+                            success=output.success, result=str(output),
+                            error="" if output.success else str(output), status=output.status,
+                            message=output.message, data=output.data,
+                        )
+                    elif isinstance(output, dict) and output.get("error"):
+                        result = ToolResult(success=False, result=output, error=str(output["error"]), data=output)
+                    else:
+                        result = ToolResult(success=True, result=output, status="returned")
+                except Exception as e:
+                    logger.exception("Tool '%s' failed", name)
+                    result = ToolResult(success=False, error=str(e))
+
+                if changes_state and result.success and result.status in {"success", "returned"} and capture is not None:
+                    try:
+                        chain_entries.append(capture(result))
+                    except Exception:
+                        pass  # this step just isn't individually undoable; chain still continues
+
+                results.append({"route": "tool_call", "tool": name, "arguments": params, **result.to_dict()})
+                _log_tool_call(name, params, result.to_dict())
+                if not result.success:
+                    stopped = True
+
+            composite = None
+            if chain_entries:
+                def _restore_chain():
+                    undone_lines, failed = [], None
+                    for entry in reversed(chain_entries):
+                        try:
+                            outcome = entry.restore()
+                            undone_lines.append(f"Undid {entry.tool}: {outcome}")
+                        except Exception as exc:
+                            failed = (entry.tool, str(exc)[:200])
+                            break
+                    if failed:
+                        undone_lines.append(f"Stopped before undoing {failed[0]}: {failed[1]}")
+                        return ToolOutput.failure("\n".join(undone_lines), status="partial")
+                    return ToolOutput("\n".join(undone_lines) or "Nothing to undo.",
+                                      data={"undone_tool": "multi_tool_call", "steps": len(undone_lines)})
+                composite = UndoEntry("multi_tool_call", _restore_chain, "")
+            return results, composite
+
+    def install_chain_undo(self, entry) -> None:
+        """Install a composite chain-undo entry built by execute_tool_chain,
+        replacing whatever bookkeeping the chain's own per-step prepare()
+        calls left behind (prepare() clears the slot on every state-changing
+        step, same as a single action always has).
+        """
+        self._undo.entry = entry
+        if entry is None:
+            self._undo.reason = "There is no action to undo in this session."
 
     def _register_builtins(self) -> None:
         """Register all built-in tools."""

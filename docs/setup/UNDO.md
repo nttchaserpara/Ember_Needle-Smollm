@@ -1,6 +1,6 @@
 # Undo one action
 
-Updated 14 September 2026. Ask `undo it` to restore the last supported change
+Updated 15 September 2026. Ask `undo it` to restore the last supported change
 performed by the current Ember session. Undo is a normal Needle-selected tool,
 not a slash command, response mode, or keyword shortcut. The executor owns its
 state; SmolLM only presents the reported result afterwards.
@@ -55,6 +55,13 @@ negation checks, argument validation and refusal of multiple proposed actions
 remain in force. Optional target validation is an executor check, not proof
 that the router correctly interpreted every target phrase.
 
+After Needle selects one confident, affirmative undo call, the router preserves
+an explicit `volume`, `brightness`, or `task` argument from the request. These
+values come from the executor's enum. A conflicting/invented model target or
+multiple named targets is rejected. This is argument grounding after selection;
+it cannot select undo when Needle declined or chose a different tool. No undo
+synonym parser, exact-match command bypass, extra model, or aliases are added.
+
 `undo it` is the verified baseline request. Some variants still fail, including
 `nevermind undo it` (the model may also propose shutdown cancellation) and
 `undo the volume change` (the model may fail to select the new tool). These
@@ -103,7 +110,9 @@ On Windows, 155 regression tests passed, covering temporary task storage,
 undo-slot boundaries, stale-state rejection, output checks, mock audio and real
 PowerShell against fake CIM providers. Real volume/brightness snapshot reads
 also succeeded without changing the device settings. Native restoration was
-not tested by modifying the user's hardware, and physical Pi testing is pending.
+not tested by modifying the user's hardware. The supplied 15 September Pi run
+passed both temporary-task verification turns; native Windows adapters are
+still only verified with mocked restoration and actual read-only snapshots.
 
 The real application pipeline passed both verification turns: it undid the
 last task, then rejected a second undo while preserving the earlier task. It
@@ -119,3 +128,8 @@ change` also failed, in addition to the variants described above. Optional
 named-target extraction was not reliable. These are known routing limits,
 not successful undo tests. Reports: `logs/undo-routing-after.json` and
 `logs/undo-routing-cases.json` (local).
+
+The description and target-grounding changes on 15 September are measured
+separately in [PI_VALIDATION.md](PI_VALIDATION.md). Failed phrases remain
+positive expectations in the fixture. The negation case additionally requires
+the `no_action` route, rather than merely accepting any result with no execution.

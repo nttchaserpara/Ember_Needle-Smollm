@@ -7,7 +7,7 @@ Inggris. Jalankan satu permintaan, tunggu hasilnya, lalu lanjutkan.
 Langsung ke: [Windows](#2-menjalankan-di-windows--terminal-vs-code),
 [prompt sederhana](#3-prompt-sederhana-untuk-mulai),
 [summarize](#4-summarize-dokumen), [memory](#5-memory-percakapan),
-[balasan natural](#balasan-natural-dan-debugging),
+[balasan natural](#balasan-natural),
 [Pi/SSH](#7-menjalankan-di-pi-melalui-ssh).
 
 ## 1. Bedakan terminal dengan prompt Ember
@@ -516,7 +516,9 @@ Ini tidak melatih atau mengubah bobot model. Angka yang sama bisa menghasilkan
 kalimat yang sama; variasi kata bukan ukuran pemahaman.
 
 Status seperti `[OK]`, `[FAILED]`, dan `[PARTIAL]` tetap ditentukan oleh hasil
-tool. JSON, tabel, isi file, hasil pencarian history, dan ringkasan dokumen
+tool. Balasan gagal, parsial, dan penolakan wajib mempertahankan seluruh kata
+dalam diagnosis asli; tambahan penyebab, lokasi, atau saran memicu fallback.
+JSON, tabel, isi file, hasil pencarian history, dan ringkasan dokumen
 tersaji utuh. Generasi balasan tidak menjalankan ulang tool dan tidak
 memperbaiki salah rute Needle. Jika memory tidak tersedia, model tetap bisa
 menjawab dari hasil saat ini. Riwayat panjang atau terpotong tidak dimasukkan
@@ -532,6 +534,19 @@ Skrip memakai hasil tool tiruan dan database sementara, tanpa tindakan OS.
 Alur generasi sama dengan aplikasi. Laporan mencatat keluaran model, fallback,
 konteks terpakai, waktu, dan puncak RAM proses. Hasil Windows tidak menjamin
 kecocokan atau kecepatan di Pi Zero 2 W; pengukuran fisik masih diperlukan.
+
+Benchmark worker kini memakai `llama-server` produksi pada kedua mode,
+tanpa membutuhkan `llama-cli` atau mengubah path dalam kode:
+
+```bash
+./venv/bin/python scripts/bench_short_response.py --mode both --n 10 --output logs/pi-worker-modes.json
+./venv/bin/python scripts/bench_short_response.py --mode sleep-wake --sleep-idle 90 --output logs/pi-sleep-wake.json
+```
+
+Mode `sleep-wake` menunggu idle lebih dari 90 detik, mencatat status tidur dan
+RSS, lalu mengukur generasi setelah bangun. Detail dan batas interpretasinya
+ada di [panduan worker](setup/LOCAL_LLM.md#persistent-worker-and-sleep-measurement).
+Ini opsi benchmark pengembangan; penggunaan normal tidak menambah perintah chat.
 
 ## Undo satu tindakan terakhir
 
@@ -573,8 +588,10 @@ Routing tetap memakai Needle dengan threshold dan validasi yang sama. `undo it`
 sudah dipilih dengan benar pada pengujian Windows. Variasi seperti `nevermind
 undo it` dan `undo the volume change` masih dapat ditolak; penambahan tool undo
 belum menyelesaikan seluruh variasi bahasa. Multi-step dan toleransi typo belum
-ditambahkan. Pemeriksaan target berlaku jika Needle mengirim target tersebut;
-pemahaman rujukan yang lebih luas belum dijamin.
+ditambahkan. Setelah Needle memilih undo, target literal `volume`, `brightness`,
+atau `task` dipertahankan dari permintaan meskipun model menghilangkannya.
+Target model yang bertentangan, tidak disebut, atau lebih dari satu ditolak.
+Penjagaan argumen ini tidak mengubah penolakan router menjadi tindakan undo.
 
 Pengujian aplikasi memakai task dan history sementara dari **shell**:
 
