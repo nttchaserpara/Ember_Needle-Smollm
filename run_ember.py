@@ -137,7 +137,7 @@ def main():
             print(f"[memory] Conversation memory is unavailable: {exc}")
     registry = ToolRegistry(memory=memory)
     reply_renderer = ReplyRenderer()
-    multistep_enabled = False
+    multistep_enabled = True
     print("EmberOS (Needle OS Agent) -- type 'exit' to quit")
     _print_benchmark("startup", elapsed=time.perf_counter() - _PROGRAM_STARTED)
     print("[mode] SmolLM2 Q4 uses llama.cpp for summaries and short replies. "
