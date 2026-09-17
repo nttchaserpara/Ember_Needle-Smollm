@@ -1,0 +1,6 @@
+In the quiet remnants of Neo-Bandung, a small exploration drone named Unit-7 woke up from a three-decade standby cycle. Its optical sensors flickered to life, calibrated against the dim morning twilight filtering through broken solar glass. The city was overgrown with bioluminescent moss, whispering in harmony with the gentle mountain breeze.
+
+Unit-7 had a single directive left in its degraded flash memory: find the central archive terminal beneath the old observatory. Navigating past rusted monorail bridges and flooded server vaults, the drone mapped its surroundings with high-frequency sonar pulses. Along the path, it discovered fragments of ancient research logs describing an ambitious clean-energy experiment that the citizens had completed just before the great evacuation.
+
+Deep inside the subterranean lab, the drone finally reached the glass pedestal housing the terminal. Despite thirty years of silence, the backup geothermal capacitors still carried a faint electrical charge. Unit-7 connected its interface cable, transferring the final encrypted telemetry packet into its storage module. The mission was accomplished. As the morning sun rose over the mist-covered peaks, Unit-7 broadcasted the long-lost coordinates back to the orbital relay station, signaling that the forgotten valley was ready for life once again.
+
