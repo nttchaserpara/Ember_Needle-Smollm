@@ -710,7 +710,7 @@ def _known_intent_call(query: str) -> dict | None:
         return {"name": "list_tasks", "arguments": {"show_all": False}}
 
     add_task_match = re.search(
-        r"\b(?:add|create|new|make)\b.*\btask\b[:\s]+(.+)"
+        r"\b(?:add|create|new|make)\b.*?\btask\b[:\s]+(.+)"
         r"|\btask[:\s]+(.+)"
         r"|\bremind\s+me\s+to\s+(.+)"
         r"|\bremember\s+to\s+(.+)",
@@ -718,8 +718,16 @@ def _known_intent_call(query: str) -> dict | None:
     )
     if add_task_match:
         title = next(g for g in add_task_match.groups() if g is not None).strip()
+        # Parse priority kalau ada "with priority X" atau "priority X"
+        priority = "normal"
+        priority_match = re.search(r"\bwith\s+priority\s+(high|normal|low)\b"
+                                   r"|\bpriority[:\s]+(high|normal|low)\b", title)
+        if priority_match:
+            priority = next(g for g in priority_match.groups() if g is not None)
+            # Hapus bagian priority dari title
+            title = re.sub(r"\s*(?:with\s+)?priority[:\s]+(?:high|normal|low)\b", "", title).strip()
         if title:
-            return {"name": "add_task", "arguments": {"title": title, "due_date": "", "priority": "normal"}}
+            return {"name": "add_task", "arguments": {"title": title, "due_date": "", "priority": priority}}
 
     if re.search(
         r"\b(?:ram|memory)\b.*?\b(?:status|usage|used|available|free)\b"
@@ -734,6 +742,48 @@ def _known_intent_call(query: str) -> dict | None:
         r"\b(?:uptime|system\s+uptime)\b", normalized
     ):
         return {"name": "cpu_info", "arguments": {}}
+        # Fix: "volume up/down" → volume_up/volume_down dengan default steps
+    if re.search(r"\bvolume\s+up\b|\bincrease\s+volume\b|\bturn\s+up\s+(?:the\s+)?volume\b", normalized):
+        return {"name": "volume_up", "arguments": {"steps": 2}}
+    if re.search(r"\bvolume\s+down\b|\bdecrease\s+volume\b|\bturn\s+down\s+(?:the\s+)?volume\b", normalized):
+        return {"name": "volume_down", "arguments": {"steps": 2}}
+
+    # Fix: "complete task N" / "mark task N done" → complete_task
+    complete_match = re.search(
+        r"\b(?:complete|finish|done|mark(?:\s+as)?(?:\s+done|\s+complete)?)\b.*?\btask\b.*?(\d+)"
+        r"|\btask\b.*?(\d+).*?\b(?:complete|finish|done)\b",
+        normalized,
+    )
+    if complete_match:
+        task_id = next(g for g in complete_match.groups() if g is not None)
+        return {"name": "complete_task", "arguments": {"task_id": int(task_id)}}
+
+    # Fix: "remove/delete task N" → remove_task
+    remove_match = re.search(
+        r"\b(?:remove|delete)\b.*?\btask\b.*?(\d+)"
+        r"|\btask\b.*?(\d+).*?\b(?:remove|delete)\b",
+        normalized,
+    )
+    if remove_match:
+        task_id = next(g for g in remove_match.groups() if g is not None)
+        return {"name": "remove_task", "arguments": {"task_id": int(task_id)}}
+
+    # Fix: "show/check system uptime" → system_uptime (Needle routes to cpu_info)
+    if re.search(r"\b(?:system\s+)?uptime\b|\bhow\s+long\b.*?\b(?:running|on|up)\b", normalized):
+        return {"name": "system_uptime", "arguments": {}}
+
+    # Fix: "find large/old/duplicate files" → correct find tool
+    if re.search(r"\bfind\b.*?\blarge\s+files?\b|\blarge\s+files?\b.*?\bfind\b", normalized):
+        return {"name": "find_large_files", "arguments": {}}
+    if re.search(r"\bfind\b.*?\bold\s+files?\b|\bold\s+files?\b.*?\bfind\b", normalized):
+        return {"name": "find_old_files", "arguments": {}}
+    if re.search(r"\bfind\b.*?\bduplicate\s+files?\b|\bduplicate\s+files?\b", normalized):
+        return {"name": "find_duplicate_files", "arguments": {}}
+
+    # Fix: "search conversation history" → search_conversation_history
+    if re.search(r"\bsearch\b.*?\b(?:conversation|chat|message|history)\b"
+                 r"|\b(?:conversation|chat)\b.*?\bhistory\b", normalized):
+        return {"name": "search_conversation_history", "arguments": {"query": "", "scope": "all"}}
 
     return None
 
@@ -755,6 +805,8 @@ def _execute_call(call: dict, tool_registry, confidence: float | None = None) ->
     if confidence is not None:
         result["confidence"] = confidence
     return result
+
+
 
 
 def _route_multi_step(calls: list[dict], tool_registry, *, confidence: float | None) -> dict:
@@ -959,9 +1011,13 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
     )
 
     if has_match and not confident:
-        # A format explanation does not execute the low-confidence proposal.
-        # Require the selected summary tool and exact grounded file reference;
-        # native negation, grounding and compound-call checks still apply.
+        # Kalau known_call ada dan Needle pilih tool yang sama, trust known_call
+        if known_call and calls[0].get("name") == known_call.get("name"):
+            try:
+                tool_registry.validate_arguments(known_call["name"], known_call["arguments"])
+                return _execute_call(known_call, tool_registry, confidence=result["confidence"])
+            except (TypeError, ValueError):
+                pass
         if (known_call and known_call["name"] == "summarize_file"
                 and Path(known_call["arguments"]["path"]).suffix.lower() == ".doc"
                 and path_alias and calls[0].get("name") == "summarize_file"
@@ -969,9 +1025,6 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
             from use_cases.file_analysis import legacy_word_unavailable
             return unresolved(str(legacy_word_unavailable(known_call["arguments"]["path"])),
                               "unsupported_document_format")
-        # Needle found a tool, but its calibrated confidence says not to act.
-        # SmolLM2 cannot inspect the OS, so generating an answer here would
-        # fabricate system state instead of safely declining the tool call.
         return {
             "route": "unresolved_tool_request",
             "needle_confidence": result["confidence"],
