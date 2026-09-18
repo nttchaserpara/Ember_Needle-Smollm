@@ -391,7 +391,13 @@ def focus_window(title_fragment: str):
 # ── Task management tools ────────────────────────────────────────────
 @needle.tool
 def add_task(title: str, due_date: str = None, priority: str = "normal"):
-    "Add a new to-do task"
+    """Add a new to-do task with a title. due_date and priority are optional.
+
+    Use for requests like "add task X", "remind me to X", "create a task for X".
+    due_date is optional -- omit it when no date is mentioned.
+    priority is optional -- defaults to normal when not specified.
+    Only title is required.
+    """
     pass
 
 @needle.tool
