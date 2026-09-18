@@ -724,7 +724,8 @@ def _known_intent_call(query: str) -> dict | None:
     if re.search(
         r"\b(?:ram|memory)\b.*?\b(?:status|usage|used|available|free)\b"
         r"|\b(?:how\s+much\s+(?:ram|memory))\b"
-        r"|\b(?:check|show)\b.*?\b(?:ram|memory\s+usage)\b",
+        r"|\b(?:check|show|what'?s?)\b.*?\b(?:ram|memory)\b"
+        r"|\b(?:ram|memory)\b.*?\bstatus\b",
         normalized,
     ) and not re.search(r"\b(?:installed|hardware|system\s+info|specs?)\b", normalized):
         return {"name": "ram_status", "arguments": {}}
@@ -996,7 +997,7 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
                 return _execute_call(known_call, tool_registry, confidence=result["confidence"])
             except (TypeError, ValueError):
                 pass
-            
+
         from smollm_fallback import run_fallback
         text, truncated = run_fallback(query)
         return {
