@@ -709,6 +709,18 @@ def _known_intent_call(query: str) -> dict | None:
     if re.search(r"\b(show|list)\b.*\b(tasks?|to-?dos?)\b", normalized):
         return {"name": "list_tasks", "arguments": {"show_all": False}}
 
+    add_task_match = re.search(
+        r"\b(?:add|create|new|make)\b.*\btask\b[:\s]+(.+)"
+        r"|\btask[:\s]+(.+)"
+        r"|\bremind\s+me\s+to\s+(.+)"
+        r"|\bremember\s+to\s+(.+)",
+        normalized,
+    )
+    if add_task_match:
+        title = next(g for g in add_task_match.groups() if g is not None).strip()
+        if title:
+            return {"name": "add_task", "arguments": {"title": title, "due_date": "", "priority": "normal"}}
+
     if re.search(
         r"\b(?:ram|memory)\b.*?\b(?:status|usage|used|available|free)\b"
         r"|\b(?:how\s+much\s+(?:ram|memory))\b"
