@@ -988,6 +988,15 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
         }
 
     if not has_match:
+        # Kalau Needle gak nemuin match tapi _known_intent_call punya kandidat,
+        # pakai itu daripada fallback ke LLM -- ini cover kasus ARM under-confidence
+        # dan token-budget-exhausted yang valid tapi Needle gagal generate calls.
+        if known_call:
+            try:
+                tool_registry.validate_arguments(known_call["name"], known_call["arguments"])
+                return _execute_call(known_call, tool_registry, confidence=result["confidence"])
+            except (TypeError, ValueError):
+                pass  # known_call invalid, lanjut ke fallback
         from smollm_fallback import run_fallback
         text, truncated = run_fallback(query)
         return {
