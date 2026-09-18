@@ -1399,7 +1399,7 @@ def _get_task_manager():
 
 
 def _tool_add_task(title: str, due_date: str = None, priority: str = "normal") -> str:
-    task = _get_task_manager().add(title, due_date, priority)
+    task = _get_task_manager().add(title, due_date or None, priority)
     return ToolOutput(f"Done! Added task #{task['id']}: {task['title']} (priority: {task['priority']}).", data=task)
 
 
