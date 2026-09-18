@@ -704,6 +704,19 @@ def _known_intent_call(query: str) -> dict | None:
     if re.search(r"\b(show|list)\b.*\b(tasks?|to-?dos?)\b", normalized):
         return {"name": "list_tasks", "arguments": {"show_all": False}}
 
+    if re.search(
+        r"\b(?:ram|memory)\b.*?\b(?:status|usage|used|available|free)\b"
+        r"|\b(?:how\s+much\s+(?:ram|memory))\b"
+        r"|\b(?:check|show)\b.*?\b(?:ram|memory\s+usage)\b",
+        normalized,
+    ) and not re.search(r"\b(?:installed|hardware|system\s+info|specs?)\b", normalized):
+        return {"name": "ram_status", "arguments": {}}
+
+    if re.search(r"\bcpu\s*(?:info|information|specs?)\b", normalized) and re.search(
+        r"\b(?:uptime|system\s+uptime)\b", normalized
+    ):
+        return {"name": "cpu_info", "arguments": {}}
+
     return None
 
 
@@ -806,6 +819,39 @@ def _fix_set_volume_misroute(calls: list[dict], query: str) -> list[dict]:
             fixed.append(call)
     return fixed
 
+# ── RAM-status confusion guard ───────────────────────────────────────────────
+
+_RAM_STATUS_CLAUSE_RE = re.compile(
+    r"\b(?:ram|memory|mem)\b.*?\b(?:status|usage|used|available|free|check|show)\b"
+    r"|\b(?:how\s+much\s+(?:ram|memory))\b"
+    r"|\b(?:check|show)\b.*?\b(?:ram|memory)\b",
+    re.IGNORECASE,
+)
+
+_HARDWARE_PROFILE_RE = re.compile(
+    r"\b(?:installed|total\s+ram|how\s+much\s+ram\s+(?:do\s+i\s+have|is\s+installed)|"
+    r"hardware\s+(?:info|spec|profile)|system\s+info|specs?)\b",
+    re.IGNORECASE,
+)
+
+
+def _fix_ram_status_misroute(calls: list[dict], query: str) -> list[dict]:
+    if _HARDWARE_PROFILE_RE.search(query):
+        return calls
+    if not _RAM_STATUS_CLAUSE_RE.search(query):
+        return calls
+    fixed = []
+    for call in calls:
+        name = call.get("name")
+        if name in ("get_system_info", "cpu_temperature"):
+            fixed.append({"name": "ram_status", "arguments": {}})
+        else:
+            fixed.append(call)
+    return fixed
+
+
+
+
 
 def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = None,
                        multi_step_mode: bool = False):
@@ -887,6 +933,7 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
 
     calls = result.get("function_calls") or []
     calls = _fix_set_volume_misroute(calls, query)
+    calls = _fix_ram_status_misroute(calls, query)
     if history_requested and (len(calls) != 1 or calls[0].get("name") != "search_conversation_history"):
         return unresolved(history_help, "conflicting_history_route")
     if len(calls) > 1 and not multi_step_mode:
