@@ -867,10 +867,6 @@ def _fix_ram_status_misroute(calls: list[dict], query: str) -> list[dict]:
             fixed.append(call)
     return fixed
 
-
-
-
-
 def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = None,
                        multi_step_mode: bool = False):
     """
@@ -989,14 +985,23 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
         }
 
     if not has_match:
-        if known_call and (result.get("error") or "token budget" in (result.get("error") or "")):
-            # Hanya rescue kalau Needle genuinely error (token-budget-exhausted, model_error)
-            # bukan kalau Needle sengaja pilih no-match (fallback_llm path normal)
-            try:
-                tool_registry.validate_arguments(known_call["name"], known_call["arguments"])
-                return _execute_call(known_call, tool_registry, confidence=result["confidence"])
-            except (TypeError, ValueError):
-                pass
+        if known_call:
+            reasoning = (result.get("reasoning") or "").lower()
+            model_err = (result.get("error") or "").lower()
+            # Rescue kalau Needle gagal karena alasan teknis (parameter parsing error,
+            # token budget habis) ATAU karena salah reasoning tentang required params --
+            # bukan kalau Needle beneran tau gak ada tool yang cocok.
+            should_rescue = (
+                "token budget" in model_err
+                or "missing required parameter" in reasoning
+                or "no tool" in reasoning
+            )
+            if should_rescue:
+                try:
+                    tool_registry.validate_arguments(known_call["name"], known_call["arguments"])
+                    return _execute_call(known_call, tool_registry, confidence=result["confidence"])
+                except (TypeError, ValueError):
+                    pass
 
         from smollm_fallback import run_fallback
         text, truncated = run_fallback(query)
