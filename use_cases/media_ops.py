@@ -1,10 +1,12 @@
 """Media operations for EmberOS-Windows: screenshots and image processing."""
 
 import logging
+import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
 from emberos.outcomes import ToolOutput
+from emberos.platform_detect import IS_LINUX_DESKTOP, IS_WINDOWS
 
 logger = logging.getLogger("emberos.use_cases.media_ops")
 
@@ -21,6 +23,38 @@ def _pil_available() -> bool:
 
 def take_screenshot(save_path: str = None) -> str:
     """Capture a full-screen screenshot. Returns the saved file path."""
+    if IS_LINUX_DESKTOP:
+        try:
+            _SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+            if save_path:
+                out = Path(save_path)
+            else:
+                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                out = _SCREENSHOTS_DIR / f"screenshot_{ts}.png"
+            out.parent.mkdir(parents=True, exist_ok=True)
+
+            if shutil.which("scrot"):
+                subprocess.run(["scrot", str(out)], check=True, timeout=10,
+                               capture_output=True, text=True)
+            elif shutil.which("gnome-screenshot"):
+                subprocess.run(["gnome-screenshot", "-f", str(out)], check=True,
+                               timeout=10, capture_output=True, text=True)
+            else:
+                if not _pil_available():
+                    return ToolOutput.failure(
+                        "Screenshot requires scrot, gnome-screenshot, or Pillow."
+                    )
+                from PIL import ImageGrab
+                ImageGrab.grab().save(str(out))
+            if not out.exists():
+                return ToolOutput.failure(
+                    "Screenshot command completed without creating an output file."
+                )
+            return f"Screenshot saved: {out}"
+        except Exception as e:
+            return ToolOutput.failure(f"Screenshot failed: {e}")
+    if not IS_WINDOWS:
+        return ToolOutput.failure("Screenshot requires a desktop environment.")
     if not _pil_available():
         return ToolOutput.failure("Screenshot requires Pillow (PIL) — not available in this environment.")
     try:
@@ -31,6 +65,7 @@ def take_screenshot(save_path: str = None) -> str:
         else:
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             out = _SCREENSHOTS_DIR / f"screenshot_{ts}.png"
+        out.parent.mkdir(parents=True, exist_ok=True)
         img = ImageGrab.grab()
         img.save(str(out))
         return f"Screenshot saved: {out}"

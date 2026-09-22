@@ -5,6 +5,7 @@ import json
 import inspect
 import logging
 import os
+import shutil
 import subprocess
 import webbrowser
 import threading
@@ -15,6 +16,7 @@ from typing import Any, Callable, Optional
 
 from emberos.config import ROOT_DIR
 from emberos.outcomes import ToolOutput
+from emberos.platform_detect import IS_LINUX_DESKTOP, IS_WINDOWS
 from emberos.undo import READ_ONLY_TOOLS, UndoManager, UndoEntry
 
 logger = logging.getLogger("emberos.tools")
@@ -1008,22 +1010,76 @@ def _tool_list_dir(path: str) -> list:
 
 
 def _tool_get_clipboard() -> str:
-    import pyperclip
-    return pyperclip.paste() or ""
+    if IS_WINDOWS:
+        import pyperclip
+        return pyperclip.paste() or ""
+    if IS_LINUX_DESKTOP:
+        if not os.environ.get("DISPLAY"):
+            return ToolOutput.failure("Clipboard requires an X11 desktop session.")
+        commands = (
+            ["xclip", "-selection", "clipboard", "-o"],
+            ["xsel", "--clipboard", "--output"],
+        )
+        for command in commands:
+            if shutil.which(command[0]) is None:
+                continue
+            try:
+                result = subprocess.run(command, check=True, capture_output=True,
+                                        text=True, timeout=5)
+                return result.stdout
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+                return ToolOutput.failure(f"Could not read clipboard: {exc}")
+        return ToolOutput.failure("Clipboard requires xclip or xsel.")
+    return ToolOutput.failure("Clipboard requires a desktop environment.")
 
 
 def _tool_set_clipboard(text: str) -> str:
-    import pyperclip
-    pyperclip.copy(text)
-    return "Clipboard updated"
+    if IS_WINDOWS:
+        import pyperclip
+        pyperclip.copy(text)
+        return "Clipboard updated"
+    if IS_LINUX_DESKTOP:
+        if not os.environ.get("DISPLAY"):
+            return ToolOutput.failure("Clipboard requires an X11 desktop session.")
+        commands = (
+            ["xclip", "-selection", "clipboard"],
+            ["xsel", "--clipboard", "--input"],
+        )
+        for command in commands:
+            if shutil.which(command[0]) is None:
+                continue
+            try:
+                subprocess.run(command, input=text, check=True, text=True,
+                               capture_output=True, timeout=5)
+                return "Clipboard updated"
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+                return ToolOutput.failure(f"Could not update clipboard: {exc}")
+        return ToolOutput.failure("Clipboard requires xclip or xsel.")
+    return ToolOutput.failure("Clipboard requires a desktop environment.")
 
 
 def _tool_open_file(path: str) -> str:
     p = Path(path)
     if not p.is_absolute():
         p = ROOT_DIR / p
-    os.startfile(str(p))
-    return f"Opened {p}"
+    if not p.exists():
+        return ToolOutput.failure(f"File not found: {p}")
+    if IS_WINDOWS:
+        os.startfile(str(p))
+        return f"Opened {p}"
+    if IS_LINUX_DESKTOP:
+        if shutil.which("xdg-open") is None:
+            return ToolOutput.failure("Opening files requires xdg-open.")
+        try:
+            proc = subprocess.Popen(
+                ["xdg-open", str(p)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return f"Opened {p} (PID: {proc.pid})"
+        except Exception as e:
+            return ToolOutput.failure(f"Could not open {p}: {e}")
+    return ToolOutput.failure("Opening files requires a desktop environment.")
 
 
 def _tool_search_web(url: str) -> str:
@@ -1033,9 +1089,24 @@ def _tool_search_web(url: str) -> str:
 
 
 def _tool_get_active_window() -> str:
-    import pygetwindow as gw
-    win = gw.getActiveWindow()
-    return win.title if win else "(no active window)"
+    if IS_WINDOWS:
+        import pygetwindow as gw
+        win = gw.getActiveWindow()
+        return win.title if win else "(no active window)"
+    if IS_LINUX_DESKTOP:
+        if not os.environ.get("DISPLAY"):
+            return ToolOutput.failure("Active-window queries require an X11 desktop session.")
+        if shutil.which("xdotool") is None:
+            return ToolOutput.failure("xdotool not found. Install it with: sudo apt install xdotool")
+        try:
+            result = subprocess.run(
+                ["xdotool", "getactivewindow", "getwindowname"],
+                check=True, capture_output=True, text=True, timeout=5,
+            )
+            return result.stdout.strip() or "(no active window)"
+        except Exception as e:
+            return ToolOutput.failure(f"Could not read active window: {e}")
+    return ToolOutput.failure("Active-window queries require a desktop environment.")
 
 
 def _tool_close_window(title: str) -> str:

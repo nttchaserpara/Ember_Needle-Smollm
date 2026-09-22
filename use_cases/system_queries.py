@@ -1,18 +1,57 @@
-"""System query functions for EmberOS-Windows."""
+"""System query and desktop-control functions for EmberOS."""
 
 import ctypes
 import logging
-import platform
-from emberos.outcomes import ToolOutput
+import os
+import re
+import shutil
 import subprocess
 from datetime import datetime, timezone
 
 import psutil
 
+from emberos.outcomes import ToolOutput
+from emberos.platform_detect import (
+    IS_LINUX,
+    IS_LINUX_DESKTOP,
+    IS_WINDOWS as _IS_WINDOWS,
+)
+
 logger = logging.getLogger("emberos.use_cases.system_queries")
 
-_IS_WINDOWS = platform.system() == "Windows"
 _PLATFORM_UNSUPPORTED = "This action is not yet supported on this platform."
+_DESKTOP_REQUIRED = "This action requires a Linux desktop environment."
+_X11_REQUIRED = "This action requires an X11 desktop session."
+
+
+def _x11_available() -> bool:
+    """Return whether the current Linux desktop exposes an X11 display."""
+    return IS_LINUX_DESKTOP and bool(os.environ.get("DISPLAY"))
+
+
+def _x11_failure() -> ToolOutput:
+    if not IS_LINUX_DESKTOP:
+        return ToolOutput.failure(_DESKTOP_REQUIRED)
+    return ToolOutput.failure(_X11_REQUIRED)
+
+
+def _connected_x11_outputs() -> list[str]:
+    """Return connected X11 output names from xrandr."""
+    if not _x11_available():
+        raise RuntimeError(_X11_REQUIRED)
+    result = subprocess.run(
+        ["xrandr", "--query"],
+        capture_output=True,
+        text=True,
+        timeout=5,
+        check=True,
+    )
+    outputs = []
+    for line in result.stdout.splitlines():
+        fields = line.split()
+        if len(fields) >= 2 and fields[1] == "connected":
+            outputs.append(fields[0])
+    return outputs
 
 
 def get_disk_usage() -> str:
@@ -150,6 +189,27 @@ def get_battery_status() -> str:
 
 
 def lock_screen() -> str:
+    if IS_LINUX_DESKTOP:
+        if not _x11_available():
+            return _x11_failure()
+        commands = (
+            ["xdg-screensaver", "lock"],
+            ["gnome-screensaver-command", "-l"],
+            ["xlock"],
+            ["loginctl", "lock-session"],
+        )
+        for command in commands:
+            if shutil.which(command[0]) is None:
+                continue
+            try:
+                subprocess.run(command, check=True, timeout=5,
+                               capture_output=True, text=True)
+                return "Screen locked."
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                continue
+        return ToolOutput.failure(
+            "No working screen locker found. Install xdg-screensaver or xlock."
+        )
     if not _IS_WINDOWS:
         return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
@@ -160,6 +220,13 @@ def lock_screen() -> str:
 
 
 def sleep_system() -> str:
+    if IS_LINUX:
+        try:
+            subprocess.run(["systemctl", "suspend"], check=True, timeout=5,
+                           capture_output=True, text=True)
+            return "Putting system to sleep..."
+        except Exception as e:
+            return ToolOutput.failure(f"Could not sleep: {e}")
     if not _IS_WINDOWS:
         return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
@@ -172,6 +239,18 @@ def sleep_system() -> str:
 
 
 def shutdown_system(delay_seconds: int = 0) -> str:
+    if IS_LINUX:
+        try:
+            if delay_seconds <= 0:
+                subprocess.run(["systemctl", "poweroff"], check=True, timeout=5,
+                               capture_output=True, text=True)
+                return "Shutting down now."
+            minutes = max(1, (delay_seconds + 59) // 60)
+            subprocess.run(["shutdown", "-h", f"+{minutes}"], check=True,
+                           timeout=5, capture_output=True, text=True)
+            return f"Shutdown scheduled in about {minutes} minute(s)."
+        except Exception as e:
+            return ToolOutput.failure(f"Shutdown failed: {e}")
     if not _IS_WINDOWS:
         return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
@@ -186,6 +265,18 @@ def shutdown_system(delay_seconds: int = 0) -> str:
 
 
 def restart_system(delay_seconds: int = 0) -> str:
+    if IS_LINUX:
+        try:
+            if delay_seconds <= 0:
+                subprocess.run(["systemctl", "reboot"], check=True, timeout=5,
+                               capture_output=True, text=True)
+                return "Restarting now."
+            minutes = max(1, (delay_seconds + 59) // 60)
+            subprocess.run(["shutdown", "-r", f"+{minutes}"], check=True,
+                           timeout=5, capture_output=True, text=True)
+            return f"Restart scheduled in about {minutes} minute(s)."
+        except Exception as e:
+            return ToolOutput.failure(f"Restart failed: {e}")
     if not _IS_WINDOWS:
         return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
@@ -200,6 +291,13 @@ def restart_system(delay_seconds: int = 0) -> str:
 
 
 def cancel_shutdown() -> str:
+    if IS_LINUX:
+        try:
+            subprocess.run(["shutdown", "-c"], check=True, timeout=5,
+                           capture_output=True, text=True)
+            return "Scheduled shutdown/restart cancelled."
+        except Exception as e:
+            return ToolOutput.failure(f"Cancel failed (no shutdown pending?): {e}")
     if not _IS_WINDOWS:
         return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
@@ -227,6 +325,25 @@ def _send_key(vk: int):
 
 
 def volume_up(steps: int = 2) -> str:
+    if IS_LINUX_DESKTOP:
+        amount = max(1, steps) * 5
+        try:
+            subprocess.run(
+                ["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"+{amount}%"],
+                check=True, timeout=5, capture_output=True, text=True,
+            )
+            return f"Volume increased ({steps} step{'s' if steps != 1 else ''})."
+        except FileNotFoundError:
+            try:
+                subprocess.run(
+                    ["amixer", "set", "Master", f"{amount}%+"],
+                    check=True, timeout=5, capture_output=True, text=True,
+                )
+                return f"Volume increased ({steps} step{'s' if steps != 1 else ''})."
+            except Exception as e:
+                return ToolOutput.failure(f"Could not increase volume: {e}")
+        except Exception as e:
+            return ToolOutput.failure(f"Could not increase volume: {e}")
     if not _IS_WINDOWS:
         return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     for _ in range(max(1, steps)):
@@ -235,6 +352,25 @@ def volume_up(steps: int = 2) -> str:
 
 
 def volume_down(steps: int = 2) -> str:
+    if IS_LINUX_DESKTOP:
+        amount = max(1, steps) * 5
+        try:
+            subprocess.run(
+                ["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"-{amount}%"],
+                check=True, timeout=5, capture_output=True, text=True,
+            )
+            return f"Volume decreased ({steps} step{'s' if steps != 1 else ''})."
+        except FileNotFoundError:
+            try:
+                subprocess.run(
+                    ["amixer", "set", "Master", f"{amount}%-"],
+                    check=True, timeout=5, capture_output=True, text=True,
+                )
+                return f"Volume decreased ({steps} step{'s' if steps != 1 else ''})."
+            except Exception as e:
+                return ToolOutput.failure(f"Could not decrease volume: {e}")
+        except Exception as e:
+            return ToolOutput.failure(f"Could not decrease volume: {e}")
     if not _IS_WINDOWS:
         return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     for _ in range(max(1, steps)):
@@ -243,6 +379,24 @@ def volume_down(steps: int = 2) -> str:
 
 
 def mute_volume() -> str:
+    if IS_LINUX_DESKTOP:
+        try:
+            subprocess.run(
+                ["pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle"],
+                check=True, timeout=5, capture_output=True, text=True,
+            )
+            return "Volume toggled mute."
+        except FileNotFoundError:
+            try:
+                subprocess.run(
+                    ["amixer", "set", "Master", "toggle"],
+                    check=True, timeout=5, capture_output=True, text=True,
+                )
+                return "Volume toggled mute."
+            except Exception as e:
+                return ToolOutput.failure(f"Could not toggle mute: {e}")
+        except Exception as e:
+            return ToolOutput.failure(f"Could not toggle mute: {e}")
     if not _IS_WINDOWS:
         return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     _send_key(_VK_VOLUME_MUTE)
@@ -280,6 +434,25 @@ def set_volume(level: int) -> str:
     """Set the absolute master audio volume percentage and verify the result."""
     if isinstance(level, bool) or not isinstance(level, int) or not 0 <= level <= 100:
         raise ValueError("Volume level must be an integer between 0 and 100")
+    if IS_LINUX_DESKTOP:
+        try:
+            try:
+                subprocess.run(
+                    ["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"{level}%"],
+                    check=True, timeout=5, capture_output=True, text=True,
+                )
+            except FileNotFoundError:
+                subprocess.run(
+                    ["amixer", "set", "Master", f"{level}%"],
+                    check=True, timeout=5, capture_output=True, text=True,
+                )
+            return ToolOutput(
+                f"Volume set to {level}%.",
+                message=f"Done! Your volume is now {level}%.",
+                data={"level": level, "muted": False},
+            )
+        except Exception as e:
+            return ToolOutput.failure(f"Could not set volume: {e}")
     if not _IS_WINDOWS:
         return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
@@ -296,6 +469,34 @@ def set_volume(level: int) -> str:
 
 def get_volume() -> str:
     """Read the master audio volume percentage and mute state."""
+    if IS_LINUX_DESKTOP:
+        try:
+            try:
+                result = subprocess.run(
+                    ["pactl", "get-sink-volume", "@DEFAULT_SINK@"],
+                    check=True, capture_output=True, text=True, timeout=5,
+                )
+                match = re.search(r"(\d+)%", result.stdout)
+                if not match:
+                    return ToolOutput.failure("Could not parse volume level.")
+                mute_result = subprocess.run(
+                    ["pactl", "get-sink-mute", "@DEFAULT_SINK@"],
+                    check=True, capture_output=True, text=True, timeout=5,
+                )
+                muted = "yes" in mute_result.stdout.lower()
+            except FileNotFoundError:
+                result = subprocess.run(
+                    ["amixer", "get", "Master"],
+                    check=True, capture_output=True, text=True, timeout=5,
+                )
+                match = re.search(r"\[(\d+)%\]", result.stdout)
+                if not match:
+                    return ToolOutput.failure("Could not parse volume level.")
+                muted = bool(re.search(r"\[(off|muted)\]", result.stdout, re.IGNORECASE))
+            suffix = " (muted)" if muted else ""
+            return f"Current volume: {match.group(1)}%{suffix}"
+        except Exception as e:
+            return ToolOutput.failure(f"Could not read volume: {e}")
     if not _IS_WINDOWS:
         return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
@@ -311,6 +512,32 @@ def get_volume() -> str:
 # ---------------------------------------------------------------------------
 
 def get_brightness() -> str:
+    if IS_LINUX_DESKTOP:
+        if not _x11_available():
+            return _x11_failure()
+        try:
+            outputs = _connected_x11_outputs()
+            if not outputs:
+                return ToolOutput.failure("No connected X11 display was found.")
+            result = subprocess.run(
+                ["xrandr", "--verbose"],
+                check=True, capture_output=True, text=True, timeout=5,
+            )
+            current_output = None
+            values = {}
+            for line in result.stdout.splitlines():
+                fields = line.split()
+                if len(fields) >= 2 and fields[1] == "connected":
+                    current_output = fields[0]
+                match = re.search(r"Brightness:\s*([\d.]+)", line)
+                if match and current_output in outputs:
+                    values[current_output] = round(float(match.group(1)) * 100)
+            if not values:
+                return ToolOutput.failure("Could not read brightness from xrandr.")
+            rendered = ", ".join(f"{name}: {values[name]}%" for name in outputs if name in values)
+            return f"Current brightness: {rendered}"
+        except Exception as e:
+            return ToolOutput.failure(f"Could not read brightness: {e}")
     if not _IS_WINDOWS:
         return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
@@ -330,6 +557,30 @@ def get_brightness() -> str:
 def set_brightness(level: int) -> str:
     if isinstance(level, bool) or not isinstance(level, int) or not 0 <= level <= 100:
         raise ValueError("Brightness level must be an integer between 0 and 100")
+    if IS_LINUX_DESKTOP:
+        if not _x11_available():
+            return _x11_failure()
+        try:
+            outputs = _connected_x11_outputs()
+            if not outputs:
+                return ToolOutput.failure("No connected X11 display was found.")
+            command = ["xrandr"]
+            for output in outputs:
+                command.extend(["--output", output, "--brightness", str(level / 100.0)])
+            result = subprocess.run(
+                command, check=False, capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode != 0:
+                return ToolOutput.failure(
+                    f"Brightness change failed: {result.stderr.strip()[:200]}"
+                )
+            return ToolOutput(
+                f"Brightness set to {level}%.",
+                message=f"Done! Your screen brightness is now {level}%.",
+                data={"level": level, "outputs": outputs},
+            )
+        except Exception as e:
+            return ToolOutput.failure(f"Could not set brightness: {e}")
     if not _IS_WINDOWS:
         return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
@@ -376,6 +627,21 @@ def set_brightness(level: int) -> str:
 
 def toggle_dark_mode() -> str:
     """Toggle Windows dark/light mode by flipping the registry key."""
+    if IS_LINUX_DESKTOP:
+        try:
+            current = subprocess.run(
+                ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
+                check=True, capture_output=True, text=True, timeout=5,
+            ).stdout.strip().strip("'")
+            new_value = "default" if "dark" in current.lower() else "prefer-dark"
+            subprocess.run(
+                ["gsettings", "set", "org.gnome.desktop.interface", "color-scheme", new_value],
+                check=True, capture_output=True, text=True, timeout=5,
+            )
+            mode = "dark" if new_value == "prefer-dark" else "light"
+            return f"Switched to {mode} mode."
+        except Exception as e:
+            return ToolOutput.failure(f"Dark mode toggle not supported on this desktop: {e}")
     if not _IS_WINDOWS:
         return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     reg_path = r"HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
@@ -401,6 +667,17 @@ if ($new -eq 0) {{ 'dark' }} else {{ 'light' }}
 
 def set_dark_mode(enable: bool) -> str:
     """Explicitly enable or disable dark mode."""
+    if IS_LINUX_DESKTOP:
+        try:
+            value = "prefer-dark" if enable else "default"
+            subprocess.run(
+                ["gsettings", "set", "org.gnome.desktop.interface", "color-scheme", value],
+                check=True, capture_output=True, text=True, timeout=5,
+            )
+            mode = "dark" if enable else "light"
+            return f"{mode.capitalize()} mode enabled."
+        except Exception as e:
+            return ToolOutput.failure(f"Could not set mode: {e}")
     if not _IS_WINDOWS:
         return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     val = 0 if enable else 1
@@ -427,6 +704,26 @@ Set-ItemProperty -Path '{reg_path}' -Name SystemUsesLightTheme -Value {val}
 # ---------------------------------------------------------------------------
 
 def get_open_windows() -> str:
+    if IS_LINUX_DESKTOP:
+        if not _x11_available():
+            return _x11_failure()
+        try:
+            result = subprocess.run(
+                ["wmctrl", "-l"],
+                check=True, capture_output=True, text=True, timeout=5,
+            )
+            titles = []
+            for line in result.stdout.splitlines():
+                fields = line.split(None, 3)
+                if len(fields) == 4 and fields[3].strip():
+                    titles.append(fields[3].strip())
+            if not titles:
+                return "No visible windows found."
+            return "Open windows:\n" + "\n".join(f"  {title}" for title in titles[:30])
+        except FileNotFoundError:
+            return ToolOutput.failure("wmctrl not found. Install it with: sudo apt install wmctrl")
+        except Exception as e:
+            return ToolOutput.failure(f"Could not list windows: {e}")
     if not _IS_WINDOWS:
         return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
@@ -443,6 +740,21 @@ def get_open_windows() -> str:
 
 
 def minimize_all_windows() -> str:
+    if IS_LINUX_DESKTOP:
+        if not _x11_available():
+            return _x11_failure()
+        try:
+            if shutil.which("wmctrl"):
+                subprocess.run(["wmctrl", "-k", "on"], check=True,
+                               capture_output=True, text=True, timeout=5)
+            elif shutil.which("xdotool"):
+                subprocess.run(["xdotool", "key", "--clearmodifiers", "Super+d"],
+                               check=True, capture_output=True, text=True, timeout=5)
+            else:
+                return ToolOutput.failure("wmctrl or xdotool not found.")
+            return "All windows minimized (Show Desktop)."
+        except Exception as e:
+            return ToolOutput.failure(f"Could not minimize windows: {e}")
     if not _IS_WINDOWS:
         return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:
@@ -457,6 +769,28 @@ def minimize_all_windows() -> str:
 
 
 def focus_window(title_fragment: str) -> str:
+    if IS_LINUX_DESKTOP:
+        if not _x11_available():
+            return _x11_failure()
+        try:
+            result = subprocess.run(
+                ["wmctrl", "-l"],
+                check=True, capture_output=True, text=True, timeout=5,
+            )
+            wanted = title_fragment.casefold()
+            for line in result.stdout.splitlines():
+                fields = line.split(None, 3)
+                if len(fields) == 4 and wanted in fields[3].casefold():
+                    subprocess.run(
+                        ["wmctrl", "-ia", fields[0]],
+                        check=True, capture_output=True, text=True, timeout=5,
+                    )
+                    return f"Focused: {fields[3].strip()}"
+            return ToolOutput.failure(f"No window found matching '{title_fragment}'.")
+        except FileNotFoundError:
+            return ToolOutput.failure("wmctrl not found. Install it with: sudo apt install wmctrl")
+        except Exception as e:
+            return ToolOutput.failure(f"Could not focus window: {e}")
     if not _IS_WINDOWS:
         return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
     try:

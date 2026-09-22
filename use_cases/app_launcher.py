@@ -2,11 +2,14 @@
 
 import logging
 import os
+import shlex
+import shutil
 import subprocess
 from pathlib import Path
 from emberos.outcomes import ToolOutput
 
 from emberos.config import ROOT_DIR
+from emberos.platform_detect import IS_LINUX_DESKTOP, IS_WINDOWS
 
 logger = logging.getLogger("emberos.use_cases.app_launcher")
 
@@ -68,7 +71,58 @@ def _log_launch(app: str, pid: int = 0, success: bool = True, error: str = ""):
         pass
 
 
+LINUX_APP_ALIASES = {
+    "firefox": ["firefox"],
+    "chrome": ["chromium-browser"],
+    "google chrome": ["chromium-browser"],
+    "chromium": ["chromium"],
+    "calculator": ["gnome-calculator"],
+    "calc": ["gnome-calculator"],
+    "terminal": ["x-terminal-emulator"],
+    "file manager": ["xdg-open", "."],
+    "files": ["xdg-open", "."],
+    "thunar": ["thunar"],
+    "text editor": ["gedit"],
+    "gedit": ["gedit"],
+    "vlc": ["vlc"],
+    "spotify": ["spotify"],
+    "code": ["code"],
+    "vs code": ["code"],
+    "vscode": ["code"],
+}
+
+
+def _launch_linux_app(app_name: str) -> str:
+    name_lower = app_name.lower().strip()
+    command = LINUX_APP_ALIASES.get(name_lower)
+    if command is None:
+        try:
+            command = shlex.split(app_name)
+        except ValueError as exc:
+            return ToolOutput.failure(f"Invalid app command: {exc}")
+    if not command:
+        return ToolOutput.failure("App name cannot be empty.")
+    if shutil.which(command[0]) is None:
+        return ToolOutput.failure(f"App not found: {app_name}")
+    try:
+        proc = subprocess.Popen(
+            command,
+            shell=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        _log_launch(app_name, pid=proc.pid)
+        return f"Launching {app_name}...\n\u2713 {app_name} started (PID: {proc.pid})"
+    except Exception as e:
+        _log_launch(app_name, success=False, error=str(e))
+        return ToolOutput.failure(f"Could not launch {app_name}: {e}")
+
+
 def launch_app(app_name: str) -> str:
+    if IS_LINUX_DESKTOP:
+        return _launch_linux_app(app_name)
+    if not IS_WINDOWS:
+        return ToolOutput.failure("Launching apps requires a desktop environment.")
     name_lower = app_name.lower().strip()
 
     # Prefer a verified packaged-app identity over an App Execution Alias
@@ -183,8 +237,20 @@ def open_file_with_default_app(path: str) -> str:
     p = Path(path)
     if not p.exists():
         return ToolOutput.failure(f"File not found: {path}")
-    os.startfile(str(p))
-    return f"Opening {p.name}..."
+    if IS_WINDOWS:
+        os.startfile(str(p))
+        return f"Opening {p.name}..."
+    if IS_LINUX_DESKTOP:
+        if shutil.which("xdg-open") is None:
+            return ToolOutput.failure("Opening files requires xdg-open.")
+        try:
+            proc = subprocess.Popen(["xdg-open", str(p)],
+                                    stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL)
+            return f"Opening {p.name}... (PID: {proc.pid})"
+        except Exception as e:
+            return ToolOutput.failure(f"Could not open {path}: {e}")
+    return ToolOutput.failure("Opening files requires a desktop environment.")
 
 
 def launch_app_from_path(path: str) -> str:
@@ -192,7 +258,10 @@ def launch_app_from_path(path: str) -> str:
     if not p.exists():
         return ToolOutput.failure(f"Not found: {path}")
     try:
-        proc = subprocess.Popen([str(p)])
+        command = [str(p)]
+        if IS_LINUX_DESKTOP and p.suffix.lower() not in {".sh", ".run", ".bin"}:
+            command = ["xdg-open", str(p)]
+        proc = subprocess.Popen(command)
         _log_launch(path, pid=proc.pid)
         return f"Launched: {p.name} (PID: {proc.pid})"
     except Exception as e:

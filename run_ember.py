@@ -11,7 +11,9 @@ Jalanin dari root Ember_tools&llm/:
 import os
 import sqlite3
 import sys
+import threading
 import time
+from copy import deepcopy
 
 import psutil
 
@@ -21,7 +23,7 @@ _PROGRAM_STARTED = time.perf_counter()
 sys.path.insert(0, ".")
 
 from needle_router import route_and_execute
-from emberos.tools import ToolRegistry
+from emberos.tools import ToolRegistry, ToolResult
 from emberos.benchmark import RequestMemorySampler
 from emberos.responses import format_tool_response
 from emberos.config import ROOT_DIR
@@ -46,24 +48,190 @@ def _format_multi_tool_response(result):
     return "\n".join(lines)
 
 
-def handle_request(query, registry, memory=None, *, reply_renderer=None, multi_step_mode=False):
-    """Keep persistence failures separate from the already executed action."""
-    try:
-        memory_response = memory_command(query, memory)
-    except (OSError, sqlite3.Error, ValueError) as exc:
-        memory_response = f"Conversation memory is unavailable: {exc}"
-    if memory_response is not None:
-        # Do not record control commands: clearing must leave an empty store,
-        # and displaying history must not recursively fill the history.
-        return {"route": "memory_view", "response": memory_response}
-    try:
-        result = route_and_execute(query, registry, multi_step_mode=multi_step_mode)
-    except Exception as exc:
-        result = {"route": "error", "response": f"Request failed: {exc}",
-                  "status": "error", "success": False}
+DESTRUCTIVE_TOOLS = frozenset({
+    "delete_file",
+    "move_file",
+    "rename_file",
+    "organize_folder",
+    "clear_completed_tasks",
+    "shutdown_system",
+    "restart_system",
+    "kill_process",
+    "sleep_system",
+    "lock_screen",
+})
+
+CONFIRMATION_WORDS = frozenset({
+    "yes", "yeah", "yep", "yup", "sure", "do it", "confirm",
+    "ok", "oke", "iya", "lakukan",
+})
+
+_PENDING_EMPTY = {"tool": None, "params": None, "calls": None, "message": None}
+_pending_confirmation = dict(_PENDING_EMPTY)
+_pending_lock = threading.RLock()
+
+
+def is_confirmation(text: str) -> bool:
+    """Return whether *text* is one of the exact accepted confirmations."""
+    return text.strip().casefold() in CONFIRMATION_WORDS
+
+
+def _build_confirm_message(tool_name: str, params: dict) -> str:
+    messages = {
+        "delete_file": f"WARNING: permanently delete '{params.get('path', '?')}'? (yes/no)",
+        "move_file": f"WARNING: move '{params.get('src', '?')}' to '{params.get('dst', '?')}'? (yes/no)",
+        "rename_file": f"WARNING: rename '{params.get('path', '?')}' to '{params.get('new_name', '?')}'? (yes/no)",
+        "organize_folder": f"WARNING: move files in '{params.get('folder', '?')}'? (yes/no)",
+        "clear_completed_tasks": "WARNING: delete all completed tasks? (yes/no)",
+        "shutdown_system": "WARNING: shut down the computer? (yes/no)",
+        "restart_system": "WARNING: restart the computer? (yes/no)",
+        "kill_process": f"WARNING: kill process '{params.get('target', '?')}'? (yes/no)",
+        "sleep_system": "WARNING: put the computer to sleep? (yes/no)",
+        "lock_screen": "WARNING: lock the screen? (yes/no)",
+    }
+    return messages.get(
+        tool_name,
+        f"WARNING: run '{tool_name}' with {params}? (yes/no)",
+    )
+
+
+def _build_chain_confirm_message(calls: list[dict]) -> str:
+    names = ", ".join(call.get("name", "unknown") for call in calls)
+    return f"WARNING: this multi-step request will run: {names}. Continue? (yes/no)"
+
+
+def _set_pending_confirmation(*, tool: str | None = None, params: dict | None = None,
+                              calls: list[dict] | None = None, message: str) -> None:
+    global _pending_confirmation
+    with _pending_lock:
+        _pending_confirmation = {
+            "tool": tool,
+            "params": deepcopy(params) if params is not None else None,
+            "calls": deepcopy(calls) if calls is not None else None,
+            "message": message,
+        }
+
+
+def _take_pending_confirmation() -> dict | None:
+    global _pending_confirmation
+    with _pending_lock:
+        if _pending_confirmation["tool"] is None and not _pending_confirmation["calls"]:
+            return None
+        pending = deepcopy(_pending_confirmation)
+        _pending_confirmation = dict(_PENDING_EMPTY)
+        return pending
+
+
+def _peek_pending_confirmation() -> dict | None:
+    with _pending_lock:
+        if _pending_confirmation["tool"] is None and not _pending_confirmation["calls"]:
+            return None
+        return deepcopy(_pending_confirmation)
+
+
+def _confirmation_result(pending: dict) -> dict:
+    calls = pending.get("calls") or []
+    tool = pending.get("tool") or ("+".join(c.get("name", "") for c in calls) if calls else None)
+    arguments = pending.get("params") if pending.get("tool") else calls
+    message = pending.get("message") or "Confirmation required."
+    return {
+        "route": "confirmation_required",
+        "tool": tool,
+        "arguments": arguments,
+        "success": False,
+        "status": "confirmation_required",
+        "response": message,
+        "display_response": message,
+    }
+
+
+def _tool_call_result(tool_name: str, params: dict, exec_result: ToolResult,
+                      confidence: float | None = None) -> dict:
+    result = {
+        "route": "tool_call",
+        "tool": tool_name,
+        "arguments": params,
+        "success": exec_result.success,
+        "result": exec_result.result,
+        "error": exec_result.error,
+        "status": exec_result.status,
+        "message": exec_result.message,
+        "data": exec_result.data,
+    }
+    if confidence is not None:
+        result["confidence"] = confidence
+    return result
+
+
+def _execute_confirmed(registry, pending: dict) -> dict:
+    calls = pending.get("calls")
+    if calls:
+        execute_chain = getattr(registry, "execute_confirmed_chain", None)
+        if execute_chain is None:
+            results, composite = registry.execute_tool_chain(calls)
+        else:
+            results, composite = execute_chain(calls)
+        registry.install_chain_undo(composite)
+        return {
+            "route": "multi_tool_call",
+            "results": results,
+            "calls": calls,
+            "confidence": None,
+            "chain_undo_available": composite is not None,
+            "truncated": False,
+        }
+
+    tool_name = pending["tool"]
+    params = pending.get("params") or {}
+    execute_one = getattr(registry, "execute_confirmed", None)
+    exec_result = (execute_one(tool_name, params)
+                   if execute_one is not None
+                   else registry.execute_tool(tool_name, params))
+    return _tool_call_result(tool_name, params, exec_result)
+
+
+class _ConfirmationGateRegistry:
+    """Delegate registry operations while holding destructive executions."""
+
+    def __init__(self, registry):
+        self._registry = registry
+
+    def __getattr__(self, name):
+        return getattr(self._registry, name)
+
+    def execute_tool(self, name: str, params: dict):
+        if name in DESTRUCTIVE_TOOLS:
+            message = _build_confirm_message(name, params)
+            _set_pending_confirmation(tool=name, params=params, message=message)
+            return ToolResult(success=False, error=message,
+                              status="confirmation_required", message=message)
+        return self._registry.execute_tool(name, params)
+
+    def execute_tool_chain(self, calls: list[dict]):
+        destructive = [call for call in calls if call.get("name") in DESTRUCTIVE_TOOLS]
+        if destructive:
+            message = _build_chain_confirm_message(calls)
+            _set_pending_confirmation(calls=calls, message=message)
+            results = []
+            for call in calls:
+                results.append({
+                    "route": "tool_call",
+                    "tool": call.get("name"),
+                    "arguments": call.get("arguments") or {},
+                    "success": False,
+                    "result": None,
+                    "error": message,
+                    "status": "confirmation_required",
+                    "message": message,
+                    "data": None,
+                })
+            return results, None
+        return self._registry.execute_tool_chain(calls)
+
+
+def _present_result(result, query, memory, reply_renderer, *, render_reply=True):
+    """Attach display/reply metadata and persist the completed turn."""
     if result.get("route") == "multi_tool_call":
-        # Skip ReplyRenderer for now: _source()/validate_reply() assume one
-        # tool and one outcome, not a list of them. Revisit in a later pass.
         display_response = _format_multi_tool_response(result)
         result["display_response"] = display_response
         result["reply"] = {"text": display_response, "original": display_response,
@@ -76,11 +244,19 @@ def handle_request(query, registry, memory=None, *, reply_renderer=None, multi_s
             if item.get("route") == "tool_call" and item.get("tool")
         )
         result["arguments"] = result.get("calls")
-    else:
+    elif render_reply:
         renderer = reply_renderer if reply_renderer is not None else ReplyRenderer()
         reply = renderer.render(result, query=query, memory=memory)
         result["display_response"] = reply["text"]
         result["reply"] = reply
+    else:
+        display_response = result.get("display_response") or result.get("response") or ""
+        result["display_response"] = display_response
+        result["reply"] = {"text": display_response, "original": display_response,
+                           "candidate": "", "source": "original",
+                           "reason": "direct_response", "elapsed_seconds": 0.0,
+                           "generation": None, "history_turn_ids": []}
+
     if memory is not None:
         response = result.get("display_response") or original_response(result)
         try:
@@ -88,6 +264,48 @@ def handle_request(query, registry, memory=None, *, reply_renderer=None, multi_s
         except (OSError, sqlite3.Error, ValueError) as exc:
             print(f"[memory] This turn could not be saved: {exc}")
     return result
+
+
+def handle_request(query, registry, memory=None, *, reply_renderer=None, multi_step_mode=False):
+    """Keep persistence failures separate from the already executed action."""
+    pending = _take_pending_confirmation()
+    if pending is not None:
+        if is_confirmation(query):
+            result = _execute_confirmed(registry, pending)
+            return _present_result(result, query, memory, reply_renderer)
+        result = {
+            "route": "no_action",
+            "success": False,
+            "status": "cancelled",
+            "response": "Action cancelled.",
+            "display_response": "Action cancelled.",
+        }
+        return _present_result(result, query, memory, reply_renderer, render_reply=False)
+
+    try:
+        memory_response = memory_command(query, memory)
+    except (OSError, sqlite3.Error, ValueError) as exc:
+        memory_response = f"Conversation memory is unavailable: {exc}"
+    if memory_response is not None:
+        # Do not record control commands: clearing must leave an empty store,
+        # and displaying history must not recursively fill the history.
+        return {"route": "memory_view", "response": memory_response}
+    try:
+        gated_registry = _ConfirmationGateRegistry(registry)
+        if multi_step_mode:
+            result = route_and_execute(query, gated_registry, multi_step_mode=True)
+        else:
+            # Keep the default call shape compatible with lightweight test and
+            # embedding stubs that implement the original two-argument API.
+            result = route_and_execute(query, gated_registry)
+    except Exception as exc:
+        result = {"route": "error", "response": f"Request failed: {exc}",
+                  "status": "error", "success": False}
+    pending = _peek_pending_confirmation()
+    if pending is not None:
+        result = _confirmation_result(pending)
+        return _present_result(result, query, memory, reply_renderer, render_reply=False)
+    return _present_result(result, query, memory, reply_renderer)
 
 
 def _format_bytes(value: int) -> str:

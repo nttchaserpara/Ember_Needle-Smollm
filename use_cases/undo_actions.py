@@ -7,12 +7,21 @@ import subprocess
 
 from emberos.outcomes import ToolOutput
 from emberos.undo import UndoConflict, UndoEntry, UndoUnavailable
+from emberos.platform_detect import IS_WINDOWS as _IS_WINDOWS
+
+
+def _windows_enabled() -> bool:
+    """Use the shared detector while preserving the adapter test seam."""
+    try:
+        from use_cases import system_queries
+        return system_queries._IS_WINDOWS
+    except ImportError:
+        return _IS_WINDOWS
 
 
 @contextmanager
 def _audio_endpoint():
-    from use_cases import system_queries
-    if not system_queries._IS_WINDOWS:
+    if not _windows_enabled():
         raise UndoUnavailable("Audio control is not supported on this platform.")
     import comtypes
     from pycaw.pycaw import AudioUtilities
@@ -78,8 +87,7 @@ _BRIGHTNESS_READ = (
 
 
 def _powershell(script, payload=None):
-    from use_cases import system_queries
-    if not system_queries._IS_WINDOWS:
+    if not _windows_enabled():
         raise UndoUnavailable("Brightness control is not supported on this platform.")
     result = subprocess.run(
         ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
