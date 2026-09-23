@@ -773,11 +773,11 @@ def _known_intent_call(query: str) -> dict | None:
         return {"name": "system_uptime", "arguments": {}}
 
     # Fix: "find large/old/duplicate files" → correct find tool
-    if re.search(r"\bfind\b.*?\blarge\s+files?\b|\blarge\s+files?\b.*?\bfind\b", normalized):
+    if re.search(r"\bfind\b.*\blarge\b.*\bfiles?\b", normalized):
         return {"name": "find_large_files", "arguments": {}}
-    if re.search(r"\bfind\b.*?\bold\s+files?\b|\bold\s+files?\b.*?\bfind\b", normalized):
+    if re.search(r"\bfind\b.*\bold\b.*\bfiles?\b", normalized):
         return {"name": "find_old_files", "arguments": {}}
-    if re.search(r"\bfind\b.*?\bduplicate\s+files?\b|\bduplicate\s+files?\b", normalized):
+    if re.search(r"\bfind\b.*\bduplicate\b.*\bfiles?\b", normalized):
         return {"name": "find_duplicate_files", "arguments": {}}
 
     # Fix: "search conversation history" → search_conversation_history
@@ -994,6 +994,24 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
         return {"route": "no_action", "needle_confidence": result.get("confidence"),
                 "response": "No action taken.", "reason": "negated_request", "truncated": False}
     if validation.get("ungrounded"):
+        model_calls = result.get("function_calls") or []
+        default_file_discovery = {
+            "find_large_files",
+            "find_old_files",
+            "find_duplicate_files",
+        }
+        # These read-only discovery tools have complete safe defaults. If the
+        # model selected the same tool but marked optional/default arguments as
+        # ungrounded, keep the explicit intent guard authoritative.
+        if (known_call
+                and known_call["name"] in default_file_discovery
+                and len(model_calls) == 1
+                and model_calls[0].get("name") == known_call["name"]):
+            try:
+                tool_registry.validate_arguments(known_call["name"], known_call["arguments"])
+                return _execute_call(known_call, tool_registry, confidence=result.get("confidence"))
+            except (TypeError, ValueError):
+                pass
         return unresolved("I couldn't reliably determine the tool arguments from your message. Please state the target and values explicitly.",
                           "ungrounded_arguments")
 
