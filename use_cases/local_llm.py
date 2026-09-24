@@ -281,8 +281,9 @@ class LocalTextClient:
     @staticmethod
     def _summary_messages(text):
         return [{"role": "user", "content": (
-            "Summarize the source below in at most three concise sentences. "
-            "Preserve its main facts.\n\nSOURCE:\n" + text
+            "Read the source below and state what it is mainly about in one "
+            "concise sentence, using no more than 30 words. Preserve the main "
+            "topic and do not add facts.\n\nSOURCE:\n" + text
         )}]
 
     def _chunks(self, text, output_tokens=192):

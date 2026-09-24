@@ -295,8 +295,8 @@ def _chunked_summarize(content: str, filename: str, word_count: int,
                        llm_client) -> str:
     """Multi-pass summarization for long documents.
 
-    Pass 1: summarize each ~10 000-char chunk in 3-5 sentences.
-    Pass 2: synthesize all section summaries into a coherent overview.
+    Pass 1: state the main topic of each ~10 000-char chunk in one sentence.
+    Pass 2: synthesize all section summaries into one concise overview.
     Failure propagates to summarize_file, which selects a source-only fallback.
     """
     # Build non-overlapping chunks with a small overlap for continuity
@@ -317,12 +317,12 @@ def _chunked_summarize(content: str, filename: str, word_count: int,
         raw = llm_client.chat(
             [
                 {"role": "system",
-                 "content": "You are a document summarizer. Reply with a concise summary of the passage only — no preamble."},
+                 "content": "You are a document summarizer. State the passage's main topic in one concise sentence only — no preamble."},
                 {"role": "user",
                  "content": (
                      f"Document: {filename}  (section {idx + 1} of {total})\n\n"
                      f"{chunk}\n\n"
-                     "Summarize this section in 2-3 clear sentences."
+                     "State what this section is mainly about in one sentence of no more than 30 words."
                  )},
             ],
             max_tokens=_CHUNK_SUMMARY_TOKENS,
@@ -348,12 +348,12 @@ def _chunked_summarize(content: str, filename: str, word_count: int,
     synthesis = llm_client.chat(
         [
             {"role": "system",
-             "content": "You are a document summarizer. Write a concise, factual summary."},
+             "content": "You are a document summarizer. State the document's main topic in one concise sentence."},
             {"role": "user",
              "content": (
                  f"The document '{filename}' (~{word_count:,} words) was split into "
                  f"{total} sections. Section summaries:\n\n{numbered}\n\n"
-                 "Write a concise overview of the full document in 2-3 sentences."
+                 "State what the full document is mainly about in one sentence of no more than 30 words."
              )},
         ],
         max_tokens=_SYNTHESIS_TOKENS,
@@ -478,13 +478,26 @@ def _extractive_summary(content: str, max_sentences: int = 8) -> str:
     substantive = [l for l in lines if l and len(l.split()) >= 8]
     text = " ".join(substantive) if substantive else " ".join(l for l in lines if l)
     sents = _split_sentences(text)
-    return " ".join(sents[:4]) if sents else content[:500]
+    return " ".join(sents[:max_sentences]) if sents else content[:500]
 
 
 def _split_sentences(text: str) -> list[str]:
     """Split text into sentences, keeping only those with 4+ words."""
     parts = re.split(r'(?<=[.!?])\s+', text)
     return [s.strip() for s in parts if len(s.split()) >= 4]
+
+
+def _one_sentence(text: str, max_words: int = 30) -> str:
+    """Keep summaries to one short sentence when a model ignores the prompt."""
+    normalized = re.sub(r'\s+', ' ', text).strip()
+    if not normalized:
+        return normalized
+    match = re.match(r'^(.+?[.!?])(?:\s|$)', normalized)
+    sentence = match.group(1).strip() if match else normalized
+    words = sentence.split()
+    if len(words) > max_words:
+        return " ".join(words[:max_words]).rstrip(" ,;:") + "..."
+    return sentence
 
 
 def legacy_word_unavailable(path: str) -> ToolOutput:
@@ -561,30 +574,30 @@ def summarize_file(path: str, llm_client=None) -> str:
                 summary = llm_client.chat(
                     [
                         {"role": "system",
-                         "content": "You are a document summarizer. Reply with one clear summary paragraph only — no preamble, no bullet points."},
+                         "content": "You are a document summarizer. Reply with one concise sentence only — no preamble, no bullet points."},
                         {"role": "user",
                          "content": (
-                             f"Write a concise summary of this document. "
-                             f"Describe what it covers, its main points, and any notable details.\n\n"
+                             "State what this document is mainly about in one sentence of no more than 30 words.\n\n"
                              f"File: {p.name}\n\n{content}"
                          )},
                     ],
-                    max_tokens=600,
+                    max_tokens=96,
                 )
             else:
                 # Multi-pass chunked summarization for large documents
                 summary = _chunked_summarize(content, p.name, word_count, llm_client)
 
             if summary and summary.strip():
-                return ToolOutput(f"{header}\n\n{summary.strip()}",
+                summary = _one_sentence(summary)
+                return ToolOutput(f"{header}\n\n{summary}",
                                   data={"method": "model", "path": str(p), "source_limited": source_limited})
         except Exception as exc:
             logger.warning("Using extractive summary for %s: %s", p.name, exc)
 
     # Fallback: structure-aware extractive summary (no LLM or LLM failed)
-    extract = _extractive_summary(content)
-    return ToolOutput(f"{header}\n\nExtractive summary (selected source sentences):\n{extract}",
-                      status="fallback", message="Model summarization was unavailable or incomplete. Here are selected sentences from the source.",
+    extract = _one_sentence(_extractive_summary(content, max_sentences=1))
+    return ToolOutput(f"{header}\n\nBrief extractive summary (one source sentence):\n{extract}",
+                      status="fallback", message="Model summarization was unavailable or incomplete. Showing one source sentence.",
                       data={"method": "extractive", "path": str(p), "source_limited": source_limited})
 
 
