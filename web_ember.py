@@ -962,6 +962,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
     function copyToClipboard(text) {
       const textarea = document.createElement('textarea');
       textarea.value = String(text ?? '');
+      textarea.setAttribute('readonly', '');
       textarea.style.position = 'fixed';
       textarea.style.top = '-9999px';
       textarea.style.left = '-9999px';
@@ -969,13 +970,20 @@ HTML_PAGE = r"""<!DOCTYPE html>
       document.body.appendChild(textarea);
       textarea.focus();
       textarea.select();
+      textarea.setSelectionRange(0, textarea.value.length);
+      let copied = false;
       try {
-        document.execCommand('copy');
-        showToast('Copied to clipboard');
+        copied = document.execCommand('copy') !== false;
       } catch (e) {
-        showToast('Copy failed');
+        copied = false;
       }
       document.body.removeChild(textarea);
+      if (copied) {
+        showToast('Copied to clipboard');
+      } else {
+        showToast('Copy failed - press Ctrl+C manually');
+      }
+      return copied;
     }
 
     function appendMessage(role, text, meta) {
@@ -992,9 +1000,10 @@ HTML_PAGE = r"""<!DOCTYPE html>
         copyBtn.type = 'button';
         copyBtn.textContent = 'Copy';
         copyBtn.onclick = () => {
-          copyToClipboard(text);
-          copyBtn.textContent = 'Copied';
-          setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+          if (copyToClipboard(text)) {
+            copyBtn.textContent = 'Copied';
+            setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+          }
         };
         bubble.appendChild(copyBtn);
       }
