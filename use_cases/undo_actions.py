@@ -3,8 +3,12 @@
 from contextlib import contextmanager
 import json
 import math
+import os
+from pathlib import Path
+import stat
 import subprocess
 
+from emberos.config import ROOT_DIR
 from emberos.outcomes import ToolOutput
 from emberos.undo import UndoConflict, UndoEntry, UndoUnavailable
 from emberos.platform_detect import IS_WINDOWS as _IS_WINDOWS
@@ -201,6 +205,56 @@ def _prepare_task(name):
     return capture
 
 
+_MAX_DELETE_UNDO_BYTES = 16 * 1024 * 1024
+
+
+def _prepare_delete_file(params):
+    """Capture a bounded regular-file snapshot before delete_file runs.
+
+    The delete tool is still responsible for the actual deletion. Keeping the
+    snapshot in the session closure makes undo work on Windows, Linux and Pi
+    without relying on a platform-specific recycle bin or an extra service.
+    """
+    target = Path(params["path"])
+    if not target.is_absolute():
+        target = ROOT_DIR / target
+
+    # Symlinks and directories have different deletion semantics and are not
+    # safe to recreate from a regular-file snapshot.
+    if target.is_symlink() or not target.is_file():
+        return None
+
+    metadata = target.stat()
+    if metadata.st_size > _MAX_DELETE_UNDO_BYTES:
+        raise UndoUnavailable("The file is too large for the session undo snapshot.")
+
+    contents = target.read_bytes()
+    mode = stat.S_IMODE(metadata.st_mode)
+    mtime_ns = metadata.st_mtime_ns
+    display_path = str(target)
+
+    def capture(result):
+        def restore():
+            if target.exists() or target.is_symlink():
+                raise UndoConflict(f"The deleted path now exists: {display_path}")
+
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(contents)
+            os.chmod(target, mode)
+            os.utime(target, ns=(mtime_ns, mtime_ns))
+            if target.read_bytes() != contents:
+                raise RuntimeError("The restored file did not match its undo snapshot.")
+
+            return ToolOutput(
+                f"Undid the deletion: {display_path}",
+                data={"undone_tool": "delete_file", "path": display_path},
+            )
+
+        return UndoEntry("delete_file", restore, "file")
+
+    return capture
+
+
 def prepare_undo(name, params):
     if name in {"set_volume", "volume_up", "volume_down", "mute_volume"}:
         before = _read_audio()
@@ -228,6 +282,8 @@ def prepare_undo(name, params):
                 raise UndoUnavailable("The action made no change.")
             return UndoEntry(name, lambda: _restore_brightness(before, after), "brightness")
         return capture
+    if name == "delete_file":
+        return _prepare_delete_file(params)
     if name in {"add_task", "complete_task", "remove_task"}:
         return _prepare_task(name)
     return None

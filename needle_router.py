@@ -489,10 +489,10 @@ def write_document(path: str, content: str, fmt: str = None):
 
 @needle.tool
 def undo_last_action(target: str = ""):
-    """Undo, revert or reverse the last action. Go back to the previous state or put it back as it was. Undo the volume change, brightness change, or last task.
+    """Undo, revert or reverse the last action. Go back to the previous state or put it back as it was. Undo a volume or brightness change, the last task action, or a deleted regular file.
 
     Args:
-        target: The explicitly named target: volume, brightness, or task. Omit when no target is named.
+        target: The explicitly named target: volume, brightness, task, or file. Omit when no target is named.
     """
     pass
 
@@ -541,7 +541,8 @@ CONFIDENCE_THRESHOLD = (
 # whole raw query, which multi-step deliberately skips -- Needle alone
 # extracting a path from a compound sentence is unverified and not worth the
 # risk of a wrong-file summary. Excluded entirely (not a time constraint --
-# an architectural one): delete_file, move_file, rename_file, organize_folder,
+# an architectural one): delete_file (still requires single-action confirmation),
+# move_file, rename_file, organize_folder,
 # clear_completed_tasks (irreversible or currently un-backed-up), run_shell,
 # kill_process, shutdown_system, restart_system (system-level, irreversible),
 # undo_last_action (nonsensical inside its own chain), summarize_file,
@@ -767,6 +768,16 @@ def _known_intent_call(query: str) -> dict | None:
     if remove_match:
         task_id = next(g for g in remove_match.groups() if g is not None)
         return {"name": "remove_task", "arguments": {"task_id": int(task_id)}}
+
+    # Fix: "delete file <path>" -> delete_file. Keep the supplied path
+    # intact so relative paths can be resolved by the file operation layer.
+    delete_match = re.search(
+        r"\bdelete\s+file\s+([^\s].+?)\.(\w+)\s*$",
+        query.strip(), re.IGNORECASE,
+    )
+    if delete_match:
+        full_path = delete_match.group(1) + "." + delete_match.group(2)
+        return {"name": "delete_file", "arguments": {"path": full_path}}
 
     # Fix: "show/check system uptime" → system_uptime (Needle routes to cpu_info)
     if re.search(r"\b(?:system\s+)?uptime\b|\bhow\s+long\b.*?\b(?:running|on|up)\b", normalized):

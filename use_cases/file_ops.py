@@ -171,7 +171,11 @@ def rename_file(path: str, new_name: str, snapshot_mgr=None) -> str:
 
 
 def delete_file(path: str, snapshot_mgr=None) -> str:
+    from emberos.config import ROOT_DIR
+
     p = Path(path)
+    if not p.is_absolute():
+        p = ROOT_DIR / p
     if not p.exists():
         return ToolOutput.failure(f"Not found: {path}")
     if snapshot_mgr:

@@ -298,7 +298,7 @@ class ToolRegistry:
         self.register(
             name="undo_last_action",
             description="Undo the last action performed by Ember, restoring its previous state when supported",
-            parameters={"target": {"type": "string", "enum": ["", "volume", "brightness", "task"],
+            parameters={"target": {"type": "string", "enum": ["", "volume", "brightness", "task", "file"],
                                    "description": "Optional named target kind. Empty means the last action of any kind; never searches older actions."}},
             func=self._undo.undo,
         )
@@ -431,7 +431,7 @@ class ToolRegistry:
         )
         self.register(
             name="delete_file",
-            description="Delete a file or directory (snapshot backup created first)",
+            description="Delete a file or directory (regular files receive a session undo snapshot when possible)",
             parameters={
                 "path": {"type": "string", "description": "Path to delete"},
             },

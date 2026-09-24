@@ -11,6 +11,7 @@ state; SmolLM only presents the reported result afterwards.
 | --- | --- |
 | Windows | `set_volume`, `volume_up`, `volume_down`, `mute_volume`, `set_brightness` |
 | Windows and Linux/Pi | `add_task`, `complete_task`, `remove_task` |
+| Windows and Linux/Pi | `delete_file` for regular files up to 16 MiB |
 
 Windows volume restoration preserves the original scalar precision and mute
 state and checks the audio endpoint identity. Brightness snapshots identify
@@ -31,11 +32,13 @@ for that action. No additional model, dependency or OS service is introduced.
   undo of earlier actions. A successful action that made no change also leaves
   nothing to reverse. Snapshot failure preserves normal tool execution, while
   making undo unavailable for that action.
-- Unknown/custom tools are barriers by default. File/shell operations, app
-  launches, bulk task clearing and other unlisted actions cannot be undone.
+- Unknown/custom tools are barriers by default. Directory/symlink deletion,
+  shell operations, app launches, bulk task clearing and other unlisted actions
+  cannot be undone. Regular-file deletion uses an in-memory snapshot and is
+  limited to files up to 16 MiB.
 - A changed endpoint, monitor set, device value or task record blocks restoration.
-  A supplied `target` (volume/brightness/task) must match the stored action;
-  the executor never searches backwards to find a matching older action.
+  A supplied `target` (volume/brightness/task/file) must match the stored
+  action; the executor never searches backwards to find a matching older action.
 - Once a restore attempt begins, its slot is consumed, even if it fails or is
   interrupted. A wrong named target is rejected before beginning the attempt.
   An unverified restore reports partial failure, never an automatic retry.
