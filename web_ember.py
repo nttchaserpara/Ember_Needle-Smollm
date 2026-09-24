@@ -752,24 +752,28 @@ HTML_PAGE = r"""<!DOCTYPE html>
     }
     .toast {
       position: fixed;
-      bottom: 90px;
-      right: 24px;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%);
       background: var(--bg-card);
       border: 1px solid var(--orange-primary);
       color: var(--text-main);
       font-family: inherit;
-      font-size: 0.8rem;
-      padding: 8px 16px;
-      border-radius: 8px;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-      z-index: 200;
+      font-size: 0.9rem;
+      font-weight: 500;
+      padding: 12px 28px;
+      border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      z-index: 9999;
+      white-space: nowrap;
       animation: fadeInOut 2.5s ease forwards;
+      pointer-events: none;
     }
     @keyframes fadeInOut {
-      0%   { opacity: 0; transform: translateY(8px); }
-      15%  { opacity: 1; transform: translateY(0); }
+      0%   { opacity: 0; transform: translateX(-50%) translateY(8px); }
+      15%  { opacity: 1; transform: translateX(-50%) translateY(0); }
       75%  { opacity: 1; }
-      100% { opacity: 0; }
+      100% { opacity: 0; transform: translateX(-50%) translateY(-4px); }
     }
     button#send-btn,
     button#welcome-send-btn {
@@ -955,6 +959,25 @@ HTML_PAGE = r"""<!DOCTYPE html>
       return escaped.replace(/\n/g, '<br>');
     }
 
+    function copyToClipboard(text) {
+      const textarea = document.createElement('textarea');
+      textarea.value = String(text ?? '');
+      textarea.style.position = 'fixed';
+      textarea.style.top = '-9999px';
+      textarea.style.left = '-9999px';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        showToast('Copied to clipboard');
+      } catch (e) {
+        showToast('Copy failed');
+      }
+      document.body.removeChild(textarea);
+    }
+
     function appendMessage(role, text, meta) {
       const wrapper = document.createElement('div');
       wrapper.className = `msg-wrapper msg-${role}`;
@@ -968,15 +991,10 @@ HTML_PAGE = r"""<!DOCTYPE html>
         copyBtn.className = 'copy-btn';
         copyBtn.type = 'button';
         copyBtn.textContent = 'Copy';
-        copyBtn.onclick = async () => {
-          try {
-            await navigator.clipboard.writeText(String(text ?? ''));
-            copyBtn.textContent = 'Copied';
-            showToast('Copied');
-            setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
-          } catch (err) {
-            showToast('Copy failed');
-          }
+        copyBtn.onclick = () => {
+          copyToClipboard(text);
+          copyBtn.textContent = 'Copied';
+          setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
         };
         bubble.appendChild(copyBtn);
       }

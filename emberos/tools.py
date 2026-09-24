@@ -1534,13 +1534,30 @@ def _tool_create_note(title: str, content: str, tags: list = None) -> str:
         raise RuntimeError(
             f"{summary}\nThe database copy is saved, but TXT export failed: {exc}"
         ) from exc
-    summary += f"\nTXT file: {path}"
     try:
-        open_in_notepad(path)
-    except OSError as exc:
-        return ToolOutput.failure(f"{summary}\nCould not open Notepad: {exc}. Open the saved TXT file manually.",
-                                  status="partial", data={"path": str(path), "saved": True, "opened": False})
-    return ToolOutput(f"{summary}\nSent to Notepad.", data={"path": str(path), "saved": True, "opened": True})
+        display_path = path.relative_to(ROOT_DIR)
+    except ValueError:
+        display_path = path
+    summary += f"\nSaved to: {display_path}"
+
+    if os.name == "nt":
+        try:
+            open_in_notepad(path)
+            return ToolOutput(
+                f"{summary}\nOpened in Notepad.",
+                data={"path": str(path), "saved": True, "opened": True},
+            )
+        except OSError as exc:
+            return ToolOutput.failure(
+                f"{summary}\nCould not open Notepad: {exc}. Open the file manually.",
+                status="partial",
+                data={"path": str(path), "saved": True, "opened": False},
+            )
+
+    return ToolOutput(
+        f"{summary}\nRunning headless - open the file via SSH to view it.",
+        data={"path": str(path), "saved": True, "opened": False},
+    )
 
 
 def _tool_search_notes(query: str) -> str:
