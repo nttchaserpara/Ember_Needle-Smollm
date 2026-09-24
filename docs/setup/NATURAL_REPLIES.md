@@ -71,7 +71,8 @@ at zero to avoid adding randomness purely for variety.
 ## Windows and Pi deployment
 
 The same reply pipeline runs on Windows and Linux. `LocalTextClient` chooses
-`llama-server.exe` on Windows and `llama-server` on Linux, and only supplies
+`llama-server.exe` on Windows and `llama-server` on Linux, or recognizes the
+unified `llama` executable and invokes its `serve` subcommand. It only supplies
 Windows process flags on Windows. Linux runtime builds are platform-specific;
 the GGUF is shared. See the setup guide for ARM build instructions.
 

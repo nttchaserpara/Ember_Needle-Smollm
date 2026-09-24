@@ -68,6 +68,15 @@ export EMBER_LLAMA_SERVER="$HOME/projects/llama.cpp/build/bin/llama-server"
 ./venv/bin/python run_ember.py
 ```
 
+The newer unified llama app is also supported. Its executable is usually named
+`llama` and exposes the server as the `serve` subcommand; point Ember at that
+executable and the worker will invoke `llama serve ...` automatically:
+
+```sh
+export EMBER_LLAMA_SERVER="$HOME/.llama-app/llama"
+./venv/bin/python run_ember.py
+```
+
 `llama-cli` alone is not the server executable. If necessary, build the server
 target from the existing source/build directory:
 
@@ -259,7 +268,7 @@ bounded conversation context, the separate 45-second reply budget and Pi evaluat
 | Environment variable | Default | Purpose |
 | --- | --- | --- |
 | `EMBER_MODEL_PATH` | `models/SmolLM2-135M-Instruct-Q4_K_M.gguf` | Override model location |
-| `EMBER_LLAMA_SERVER` | Auto-discovered in `runtimes/llama.cpp`, then PATH | Native executable |
+| `EMBER_LLAMA_SERVER` | Auto-discovered in `runtimes/llama.cpp`, then PATH | Native `llama-server` executable, or unified `llama` app |
 | `EMBER_LLM_CONTEXT` | `2048` | Total prompt/output context; minimum 512 |
 | `EMBER_LLM_THREADS` | `4` | Generation threads |
 | `EMBER_LLM_TIMEOUT` | `180` seconds | Individual HTTP request timeout |
@@ -295,8 +304,9 @@ job separately from children after explicit worker shutdown.
 
 The maintained reply benchmark uses the actual `ReplyRenderer` and
 `LocalTextClient` in both residency modes. It supports Windows and Linux path
-discovery and uses only `llama-server`; no `llama-cli`, hardcoded Pi paths,
-fixed port, separate HTTP library or additional build target is needed.
+discovery and uses `llama-server`, or the unified `llama serve` subcommand;
+there are no hardcoded Pi paths, fixed ports, separate HTTP library or
+additional build target requirements.
 The old root entry point forwards to the same script:
 
 ```sh

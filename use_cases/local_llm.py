@@ -151,6 +151,16 @@ class LocalTextClient:
             return installed
         raise GenerationError("llama-server is missing. Run scripts/setup_local_llm.py; see docs/setup/LOCAL_LLM.md.")
 
+    @staticmethod
+    def _server_command(binary, arguments):
+        """Build a command for standalone llama-server or the unified llama app."""
+        # The official standalone binary accepts flags immediately after its
+        # executable.  The newer unified `llama` app exposes the same server
+        # flags under the `serve` subcommand instead.
+        if Path(binary).stem.casefold() == "llama":
+            return [binary, "serve", *arguments]
+        return [binary, *arguments]
+
     def _remaining(self, maximum):
         remaining = self._deadline - time.monotonic()
         if remaining <= 0:
@@ -202,13 +212,14 @@ class LocalTextClient:
         log_path = ROOT_DIR / "logs" / "llama-server.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         self._log = log_path.open("w", encoding="utf-8")
-        command = [
-            binary, "-m", str(self.model_path), "--host", "127.0.0.1", "--port", str(port),
+        arguments = [
+            "-m", str(self.model_path), "--host", "127.0.0.1", "--port", str(port),
             "--api-key", self._api_key, "-c", str(self.context_size), "-t", str(self.threads),
             "-np", "1", "-b", "128", "-ub", "64", "-ngl", "0", "--no-context-shift",
         ]
         if self.persistent:
-            command += ["--sleep-idle-seconds", str(self.sleep_idle)]
+            arguments += ["--sleep-idle-seconds", str(self.sleep_idle)]
+        command = self._server_command(binary, arguments)
         options = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
         self.process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=self._log,
                                         stderr=subprocess.STDOUT, shell=False, **options)
