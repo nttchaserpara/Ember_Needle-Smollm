@@ -64,10 +64,8 @@ class NotesManager:
 
     def export_text(self, note: dict) -> Path:
         """Export a saved note without overwriting existing files or edits."""
-        title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", note["title"])
-        title = title[:80].strip(" .") or "Note"
         # The numeric prefix also makes reserved Windows names (e.g. CON) safe.
-        stem = f"{note['id']}-{title}"
+        stem = self._export_stem(note)
         self._notes_dir.mkdir(parents=True, exist_ok=True)
         suffix = 0
         while True:
@@ -79,6 +77,58 @@ class NotesManager:
                 return path
             except FileExistsError:
                 suffix += 1
+
+    def note_for_export(self, path: str | Path) -> dict | None:
+        """Return the note represented by an exported TXT path, if any."""
+        candidate = Path(path)
+        if not candidate.is_absolute():
+            candidate = ROOT_DIR / candidate
+        try:
+            candidate = candidate.resolve()
+            notes_dir = self._notes_dir.resolve()
+        except OSError:
+            return None
+        if candidate.parent != notes_dir or candidate.suffix.lower() != ".txt":
+            return None
+
+        match = re.match(r"^(\d+)-", candidate.stem)
+        if not match:
+            return None
+        note = self.get_by_id(int(match.group(1)))
+        if note is None:
+            return None
+
+        stem = self._export_stem(note)
+        if candidate.stem == stem:
+            return note
+        if candidate.stem.startswith(stem + "-") and candidate.stem[len(stem) + 1:].isdigit():
+            return note
+        return None
+
+    def delete_export(self, path: str | Path) -> dict | None:
+        """Remove the database row belonging to an exported note, if present."""
+        note = self.note_for_export(path)
+        if note is None or not self.delete(note["id"]):
+            return None
+        return note
+
+    def restore_snapshot(self, note: dict) -> None:
+        """Restore a deleted note row with its original ID and metadata."""
+        tags_str = ",".join(note.get("tags") or [])
+        with self._lock:
+            existing = self._conn.execute(
+                "SELECT id, title, content, timestamp, tags FROM notes WHERE id = ?",
+                (note["id"],),
+            ).fetchone()
+            if existing is not None:
+                if self._row_to_dict(existing) == note:
+                    return
+                raise RuntimeError(f"Note #{note['id']} changed before undo.")
+            self._conn.execute(
+                "INSERT INTO notes (id, title, content, timestamp, tags) VALUES (?, ?, ?, ?, ?)",
+                (note["id"], note["title"], note["content"], note["timestamp"], tags_str),
+            )
+            self._conn.commit()
 
     def get_by_id(self, note_id: int) -> dict | None:
         with self._lock:
@@ -128,6 +178,12 @@ class NotesManager:
             "timestamp": row[3],
             "tags": [t.strip() for t in tags_str.split(",") if t.strip()],
         }
+
+    @staticmethod
+    def _export_stem(note: dict) -> str:
+        title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", note["title"])
+        title = title[:80].strip(" .") or "Note"
+        return f"{note['id']}-{title}"
 
 
 def open_in_notepad(path: Path) -> None:

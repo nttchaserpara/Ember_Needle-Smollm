@@ -232,6 +232,11 @@ def _prepare_delete_file(params):
     mode = stat.S_IMODE(metadata.st_mode)
     mtime_ns = metadata.st_mtime_ns
     display_path = str(target)
+    note_snapshot = None
+    notes_db = ROOT_DIR / "data" / "ember.db"
+    if target.parent.resolve() == (ROOT_DIR / "data" / "notes").resolve() and notes_db.exists():
+        from emberos.tools import _get_notes_manager
+        note_snapshot = _get_notes_manager().note_for_export(target)
 
     def capture(result):
         def restore():
@@ -244,6 +249,13 @@ def _prepare_delete_file(params):
             os.utime(target, ns=(mtime_ns, mtime_ns))
             if target.read_bytes() != contents:
                 raise RuntimeError("The restored file did not match its undo snapshot.")
+            if note_snapshot:
+                try:
+                    from emberos.tools import _get_notes_manager
+                    _get_notes_manager().restore_snapshot(note_snapshot)
+                except Exception:
+                    target.unlink(missing_ok=True)
+                    raise
 
             return ToolOutput(
                 f"Undid the deletion: {display_path}",

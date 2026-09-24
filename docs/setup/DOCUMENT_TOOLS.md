@@ -22,7 +22,9 @@ Buat catatan di Notepad dengan judul "Belanja" dan isi "Beli susu dan telur"
 ```
 
 `search_notes` mencari salinan database. Edit manual pada file di Notepad
-belum disinkronkan kembali ke database. Catatan lama tidak diekspor otomatis.
+belum disinkronkan kembali ke database. Jika file export note dihapus melalui
+`delete_file`, record database yang sesuai ikut dihapus; `undo that` memulihkan
+keduanya. Catatan lama tidak diekspor otomatis.
 
 ## Excel dan aplikasi spreadsheet lain
 

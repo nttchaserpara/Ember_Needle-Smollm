@@ -1196,7 +1196,25 @@ def _tool_rename_file(path: str, new_name: str) -> str:
 
 def _tool_delete_file(path: str) -> str:
     from use_cases.file_ops import delete_file
-    return delete_file(path)
+    result = delete_file(path)
+    file_deleted = not isinstance(result, ToolOutput) or result.success
+    stale_export = (isinstance(result, ToolOutput) and not result.success
+                    and str(result).startswith("Not found:"))
+    if not file_deleted and not stale_export:
+        return result
+
+    # Notes have a searchable SQLite row as well as their exported TXT file.
+    # Keep both stores consistent when the exported path is deleted.
+    note = _get_notes_manager().delete_export(path)
+    if note:
+        if stale_export:
+            return ToolOutput(
+                f"{result}\nRemoved stale note #{note['id']} from searchable notes.",
+                status="partial",
+                data={"path": path, "note_deleted": note["id"], "file_deleted": False},
+            )
+        return f"{result}\nRemoved note #{note['id']} from searchable notes."
+    return result
 
 
 def _tool_get_file_info(path: str) -> dict:

@@ -47,7 +47,8 @@ The application launcher lives in `use_cases/app_launcher.py`.
 
 Ask `undo it` to restore the last supported change in the current session.
 There is one undo slot and no redo. Windows supports volume/mute and brightness
-restoration; Windows and Linux/Pi support adding, completing and removing tasks.
+restoration; Windows and Linux/Pi support adding, completing and removing tasks,
+as well as restoring regular files deleted within the session.
 An executed change replaces the slot, including unsupported or failed changes;
 read-only requests and routing refusals leave it intact. Undo checks that the
 target still matches the recorded post-state before restoring it.
