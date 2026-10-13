@@ -21,7 +21,7 @@ def main() -> int:
         "--skip-model", action="store_true",
         help="Skip summary generation when a separate local-model benchmark runs next.",
     )
-    args = parser.parse_args()
+    options = parser.parse_args()
     if platform.system() != "Linux":
         raise SystemExit("Run this device smoke test on Linux.")
 
@@ -200,7 +200,7 @@ def main() -> int:
                                "dst": str(temp / "converted.jpg")})
 
         # Local-model tool, tested against the bundled fixture/model.
-        if args.skip_model:
+        if options.skip_model:
             report("summarize_file", "COVERED-SEPARATELY",
                    "the package smoke runs benchmark_local_llm.py after this suite")
         else:
