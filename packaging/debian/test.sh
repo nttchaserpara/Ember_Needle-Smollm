@@ -79,8 +79,17 @@ printf '%s\n' "$result"
 RESULT_JSON="$result" /opt/emberos/venv/bin/python - <<'PY'
 import json
 import os
+from pathlib import Path
 
 report = json.loads(os.environ["RESULT_JSON"])
-assert report["generation_outcome"] == "model_summary_completed", report["generation_outcome"]
+if report["generation_outcome"] != "model_summary_completed":
+    log_path = Path("/home/emberos-smoke/.local/share/emberos/logs/llama-server.log")
+    print(f"llama-server diagnostic log: {log_path}")
+    if log_path.is_file():
+        lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        print("\n".join(lines[-100:]))
+    else:
+        print("The llama-server log file was not created.")
+    raise AssertionError(report["generation_outcome"])
 assert not report["children_still_running"], report["children_still_running"]
 PY

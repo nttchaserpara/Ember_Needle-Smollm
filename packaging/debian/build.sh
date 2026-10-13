@@ -63,8 +63,10 @@ curl --fail --location --silent --show-error \
     --output "$llama_source/source.tar.gz"
 mkdir "$llama_source/source"
 tar -xzf "$llama_source/source.tar.gz" --strip-components=1 -C "$llama_source/source"
+# Keep the packaged worker independent of libraries left in the temporary build tree.
 cmake -S "$llama_source/source" -B "$llama_build" \
     -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_SHARED_LIBS=OFF \
     -DGGML_NATIVE=OFF \
     -DGGML_CUDA=OFF \
     -DGGML_BLAS=OFF \
