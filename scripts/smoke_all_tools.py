@@ -62,13 +62,14 @@ def main() -> int:
             detail = str(detail).replace("\n", " ")[:150]
             print(f"{status:20} {name}" + (f" - {detail}" if detail else ""))
 
-        def call(name, arguments=None, *, confirmed=False):
+        def call(name, arguments=None, *, confirmed=False, record_report=True):
             args = arguments or {}
             result = (registry.execute_confirmed(name, args) if confirmed
                       else registry.execute_tool(name, args))
             if not result.success:
                 raise AssertionError(f"{name}: {result.status}: {result.error}")
-            report(name, "PASS", result.status)
+            if record_report:
+                report(name, "PASS", result.status)
             return result
 
         def unsupported(name, arguments=None):
@@ -158,10 +159,21 @@ def main() -> int:
         organize.mkdir()
         organize_file = organize / "organize.txt"
         organize_file.write_text("safe fixture", encoding="utf-8")
-        call("organize_folder", {"folder": str(organize), "preview_only": True},
-             confirmed=True)
-        call("organize_folder", {"folder": str(organize), "preview_only": False},
-             confirmed=True)
+        preview = call(
+            "organize_folder", {"folder": str(organize), "preview_only": True},
+            confirmed=True, record_report=False,
+        )
+        if preview.result.get("preview", {}).get("Documents") != 1:
+            raise AssertionError(f"organize_folder preview was incorrect: {preview.result}")
+        organized = call(
+            "organize_folder", {"folder": str(organize), "preview_only": False},
+            confirmed=True, record_report=False,
+        )
+        expected_organized_file = organize / "Documents" / organize_file.name
+        if (organized.result.get("moved", {}).get("Documents") != 1
+                or not expected_organized_file.is_file()):
+            raise AssertionError(f"organize_folder did not move its fixture: {organized.result}")
+        report("organize_folder", "PASS", "preview and move")
 
         moved = temp / "move-me.txt"
         moved.write_text("move fixture", encoding="utf-8")
