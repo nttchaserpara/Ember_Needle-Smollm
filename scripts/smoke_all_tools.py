@@ -158,7 +158,8 @@ def main() -> int:
         organize.mkdir()
         organize_file = organize / "organize.txt"
         organize_file.write_text("safe fixture", encoding="utf-8")
-        call("organize_folder", {"folder": str(organize), "preview_only": True})
+        call("organize_folder", {"folder": str(organize), "preview_only": True},
+             confirmed=True)
         call("organize_folder", {"folder": str(organize), "preview_only": False},
              confirmed=True)
 
