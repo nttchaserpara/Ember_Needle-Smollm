@@ -60,6 +60,7 @@ test ! -e /opt/emberos/data
 # Load the native Needle engine and make one tool-selection inference.
 runuser -u emberos-smoke -- env HOME=/home/emberos-smoke \
     EMBER_DATA_DIR=/home/emberos-smoke/.local/share/emberos \
+    PYTHONPATH=/opt/emberos \
     /opt/emberos/venv/bin/python -c '
 import json
 from needle_router import needle_agent
