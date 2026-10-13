@@ -42,7 +42,8 @@ def take_screenshot(save_path: str = None) -> str:
             else:
                 if not _pil_available():
                     return ToolOutput.failure(
-                        "Screenshot requires scrot, gnome-screenshot, or Pillow."
+                        "Screenshot requires scrot, gnome-screenshot, or Pillow.",
+                        status="unsupported",
                     )
                 from PIL import ImageGrab
                 ImageGrab.grab().save(str(out))
@@ -54,9 +55,13 @@ def take_screenshot(save_path: str = None) -> str:
         except Exception as e:
             return ToolOutput.failure(f"Screenshot failed: {e}")
     if not IS_WINDOWS:
-        return ToolOutput.failure("Screenshot requires a desktop environment.")
+        return ToolOutput.failure("Screenshot requires a desktop environment.",
+                                  status="unsupported")
     if not _pil_available():
-        return ToolOutput.failure("Screenshot requires Pillow (PIL) — not available in this environment.")
+        return ToolOutput.failure(
+            "Screenshot requires Pillow (PIL) — not available in this environment.",
+            status="unsupported",
+        )
     try:
         from PIL import ImageGrab
         _SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -76,7 +81,8 @@ def take_screenshot(save_path: str = None) -> str:
 def resize_image(src: str, width: int, height: int, dst: str = None) -> str:
     """Resize an image to the given dimensions."""
     if not _pil_available():
-        return ToolOutput.failure("Image editing requires Pillow — not available.")
+        return ToolOutput.failure("Image editing requires Pillow — not available.",
+                                  status="unsupported")
     try:
         from PIL import Image
         p = Path(src)
@@ -94,7 +100,8 @@ def resize_image(src: str, width: int, height: int, dst: str = None) -> str:
 def convert_image(src: str, target_format: str, dst: str = None) -> str:
     """Convert an image to a different format (e.g. PNG → JPEG)."""
     if not _pil_available():
-        return ToolOutput.failure("Image conversion requires Pillow — not available.")
+        return ToolOutput.failure("Image conversion requires Pillow — not available.",
+                                  status="unsupported")
     try:
         from PIL import Image
         p = Path(src)
@@ -118,7 +125,8 @@ def convert_image(src: str, target_format: str, dst: str = None) -> str:
 def rotate_image(src: str, degrees: float, dst: str = None) -> str:
     """Rotate an image by the given degrees (counter-clockwise)."""
     if not _pil_available():
-        return ToolOutput.failure("Image editing requires Pillow — not available.")
+        return ToolOutput.failure("Image editing requires Pillow — not available.",
+                                  status="unsupported")
     try:
         from PIL import Image
         p = Path(src)
@@ -136,7 +144,8 @@ def rotate_image(src: str, degrees: float, dst: str = None) -> str:
 def get_image_info(src: str) -> str:
     """Return dimensions, mode, and format of an image."""
     if not _pil_available():
-        return ToolOutput.failure("Image info requires Pillow — not available.")
+        return ToolOutput.failure("Image info requires Pillow — not available.",
+                                  status="unsupported")
     try:
         from PIL import Image
         p = Path(src)
@@ -165,7 +174,7 @@ def extract_audio(video_src: str, dst: str = None) -> str:
     """Extract audio track from a video file to MP3."""
     if not _ffmpeg_available():
         return (ToolOutput.failure("Audio extraction requires FFmpeg. "
-                "Install it and ensure it is on the system PATH."))
+                "Install it and ensure it is on the system PATH.", status="unsupported"))
     try:
         p = Path(video_src)
         if not p.exists():
@@ -188,7 +197,7 @@ def extract_video_clip(src: str, start: str, duration: str, dst: str = None) -> 
     """Extract a clip from a video. start/duration in HH:MM:SS or seconds format."""
     if not _ffmpeg_available():
         return (ToolOutput.failure("Video clipping requires FFmpeg. "
-                "Install it and ensure it is on the system PATH."))
+                "Install it and ensure it is on the system PATH.", status="unsupported"))
     try:
         p = Path(src)
         if not p.exists():

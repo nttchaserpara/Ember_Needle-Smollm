@@ -61,6 +61,17 @@ For example, enter `Create a note titled 'Pi smoke' with content 'EmberOS test'`
 then `Search my notes for Pi smoke`, `Add a task titled 'Pi smoke'`, and
 `List my tasks`.
 
+For an isolated pass through the registered Web tools, run:
+
+```sh
+/opt/emberos/venv/bin/python /opt/emberos/scripts/smoke_all_tools.py --skip-model
+```
+
+It reports working tools, platform-unavailable tools, policy-blocked actions,
+and checks needing external setup. It uses temporary notes, tasks, and files;
+it does not run host-wide power/window actions or create a real Google document.
+The local model path is checked separately below.
+
 To test the bundled SmolLM2/`llama-server` summary path separately, run this
 from the shell and check that the report says `model_summary_completed` and
 lists no `children_still_running` processes:
@@ -80,10 +91,11 @@ only. It preserves the Linux capabilities already present in EmberOS; Windows
 audio, brightness, and other unported desktop tools are not added by packaging.
 The build workflow tests installation from a signed test APT repository, user
 permissions, the packaged GUI page and API authentication, Needle routing
-inference, and a local model summary. Its arm64 job runs on a hosted arm64 Linux
-runner; this does not replace testing on the actual Raspberry Pi model and lab
-devices. It does not execute every registered tool; platform-specific and
-side-effecting tools need separate device checks.
+inference, the registered Web tools in an isolated headless smoke run, and a
+local model summary. Unsafe host controls are checked at the confirmation gate;
+Google Docs is reported as requiring account setup. Its arm64 job runs on a
+hosted arm64 Linux runner; this does not replace testing on the actual Raspberry
+Pi model and lab devices.
 
 ## Maintainer release
 

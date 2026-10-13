@@ -38,7 +38,9 @@ git -c safe.directory="$SOURCE_DIR" -C "$SOURCE_DIR" ls-files -z \
     | tar -C "$APP_ROOT" -xf -
 
 python3 -m venv "$APP_ROOT/venv"
-"$APP_ROOT/venv/bin/python" -m pip install -r "$APP_ROOT/requirements.txt"
+"$APP_ROOT/venv/bin/python" -m pip install \
+    -r "$APP_ROOT/requirements.txt" \
+    -r "$APP_ROOT/requirements-documents.txt"
 
 case "$ARCH" in
     arm64) needle_tag=manylinux2014_aarch64 ;;

@@ -31,8 +31,8 @@ def _x11_available() -> bool:
 
 def _x11_failure() -> ToolOutput:
     if not IS_LINUX_DESKTOP:
-        return ToolOutput.failure(_DESKTOP_REQUIRED)
-    return ToolOutput.failure(_X11_REQUIRED)
+        return ToolOutput.failure(_DESKTOP_REQUIRED, status="unsupported")
+    return ToolOutput.failure(_X11_REQUIRED, status="unsupported")
 
 
 def _connected_x11_outputs() -> list[str]:
@@ -166,13 +166,14 @@ def check_cpu_temperature() -> str:
     except (AttributeError, Exception):
         pass
     return (ToolOutput.failure("CPU temperature monitoring is not available on this system. "
-            "Use HWMonitor or HWiNFO for temperature readings."))
+            "Use HWMonitor or HWiNFO for temperature readings.", status="unsupported"))
 
 
 def get_battery_status() -> str:
     battery = psutil.sensors_battery()
     if battery is None:
-        return ToolOutput.failure("No battery detected — this system is likely a desktop.")
+        return ToolOutput.failure("No battery detected — this system is likely a desktop.",
+                                  status="unsupported")
     percent = battery.percent
     plugged = battery.power_plugged
     if plugged:
@@ -211,7 +212,7 @@ def lock_screen() -> str:
             "No working screen locker found. Install xdg-screensaver or xlock."
         )
     if not _IS_WINDOWS:
-        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED, status="unsupported")
     try:
         ctypes.windll.user32.LockWorkStation()
         return "Screen locked."
@@ -228,7 +229,7 @@ def sleep_system() -> str:
         except Exception as e:
             return ToolOutput.failure(f"Could not sleep: {e}")
     if not _IS_WINDOWS:
-        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED, status="unsupported")
     try:
         subprocess.Popen(
             ["rundll32.exe", "powrprof.dll,SetSuspendState", "0", "1", "0"]
@@ -252,7 +253,7 @@ def shutdown_system(delay_seconds: int = 0) -> str:
         except Exception as e:
             return ToolOutput.failure(f"Shutdown failed: {e}")
     if not _IS_WINDOWS:
-        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED, status="unsupported")
     try:
         subprocess.run(
             ["shutdown", "/s", "/t", str(delay_seconds)],
@@ -278,7 +279,7 @@ def restart_system(delay_seconds: int = 0) -> str:
         except Exception as e:
             return ToolOutput.failure(f"Restart failed: {e}")
     if not _IS_WINDOWS:
-        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED, status="unsupported")
     try:
         subprocess.run(
             ["shutdown", "/r", "/t", str(delay_seconds)],
@@ -299,7 +300,7 @@ def cancel_shutdown() -> str:
         except Exception as e:
             return ToolOutput.failure(f"Cancel failed (no shutdown pending?): {e}")
     if not _IS_WINDOWS:
-        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED, status="unsupported")
     try:
         subprocess.run(["shutdown", "/a"], check=True, capture_output=True)
         return "Scheduled shutdown/restart cancelled."
@@ -345,7 +346,7 @@ def volume_up(steps: int = 2) -> str:
         except Exception as e:
             return ToolOutput.failure(f"Could not increase volume: {e}")
     if not _IS_WINDOWS:
-        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED, status="unsupported")
     for _ in range(max(1, steps)):
         _send_key(_VK_VOLUME_UP)
     return f"Volume increased ({steps} step{'s' if steps != 1 else ''})."
@@ -372,7 +373,7 @@ def volume_down(steps: int = 2) -> str:
         except Exception as e:
             return ToolOutput.failure(f"Could not decrease volume: {e}")
     if not _IS_WINDOWS:
-        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED, status="unsupported")
     for _ in range(max(1, steps)):
         _send_key(_VK_VOLUME_DOWN)
     return f"Volume decreased ({steps} step{'s' if steps != 1 else ''})."
@@ -398,7 +399,7 @@ def mute_volume() -> str:
         except Exception as e:
             return ToolOutput.failure(f"Could not toggle mute: {e}")
     if not _IS_WINDOWS:
-        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED, status="unsupported")
     _send_key(_VK_VOLUME_MUTE)
     return "Volume toggled mute."
 
@@ -454,7 +455,7 @@ def set_volume(level: int) -> str:
         except Exception as e:
             return ToolOutput.failure(f"Could not set volume: {e}")
     if not _IS_WINDOWS:
-        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED, status="unsupported")
     try:
         actual, muted = _master_volume(level)
     except Exception as e:
@@ -498,7 +499,7 @@ def get_volume() -> str:
         except Exception as e:
             return ToolOutput.failure(f"Could not read volume: {e}")
     if not _IS_WINDOWS:
-        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED, status="unsupported")
     try:
         actual, muted = _master_volume()
     except Exception as e:
@@ -539,7 +540,7 @@ def get_brightness() -> str:
         except Exception as e:
             return ToolOutput.failure(f"Could not read brightness: {e}")
     if not _IS_WINDOWS:
-        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED, status="unsupported")
     try:
         result = subprocess.run(
             ["powershell", "-Command",
@@ -582,7 +583,7 @@ def set_brightness(level: int) -> str:
         except Exception as e:
             return ToolOutput.failure(f"Could not set brightness: {e}")
     if not _IS_WINDOWS:
-        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED, status="unsupported")
     try:
         script = (
             "$ErrorActionPreference = 'Stop'; try { "
@@ -643,7 +644,7 @@ def toggle_dark_mode() -> str:
         except Exception as e:
             return ToolOutput.failure(f"Dark mode toggle not supported on this desktop: {e}")
     if not _IS_WINDOWS:
-        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED, status="unsupported")
     reg_path = r"HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
     script = f"""
 $val = (Get-ItemProperty -Path '{reg_path}' -Name AppsUseLightTheme).AppsUseLightTheme
@@ -679,7 +680,7 @@ def set_dark_mode(enable: bool) -> str:
         except Exception as e:
             return ToolOutput.failure(f"Could not set mode: {e}")
     if not _IS_WINDOWS:
-        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED, status="unsupported")
     val = 0 if enable else 1
     reg_path = r"HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
     script = f"""
@@ -725,7 +726,7 @@ def get_open_windows() -> str:
         except Exception as e:
             return ToolOutput.failure(f"Could not list windows: {e}")
     if not _IS_WINDOWS:
-        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED, status="unsupported")
     try:
         import pygetwindow as gw
         wins = [w for w in gw.getAllWindows() if w.title.strip()]
@@ -756,7 +757,7 @@ def minimize_all_windows() -> str:
         except Exception as e:
             return ToolOutput.failure(f"Could not minimize windows: {e}")
     if not _IS_WINDOWS:
-        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED, status="unsupported")
     try:
         # Win+D shows desktop / minimizes all
         ctypes.windll.user32.keybd_event(0x5B, 0, 0, 0)        # Win down
@@ -792,7 +793,7 @@ def focus_window(title_fragment: str) -> str:
         except Exception as e:
             return ToolOutput.failure(f"Could not focus window: {e}")
     if not _IS_WINDOWS:
-        return ToolOutput.failure(_PLATFORM_UNSUPPORTED)
+        return ToolOutput.failure(_PLATFORM_UNSUPPORTED, status="unsupported")
     try:
         import pygetwindow as gw
         matches = [w for w in gw.getAllWindows()

@@ -122,7 +122,8 @@ def launch_app(app_name: str) -> str:
     if IS_LINUX_DESKTOP:
         return _launch_linux_app(app_name)
     if not IS_WINDOWS:
-        return ToolOutput.failure("Launching apps requires a desktop environment.")
+        return ToolOutput.failure("Launching apps requires a desktop environment.",
+                                  status="unsupported")
     name_lower = app_name.lower().strip()
 
     # Prefer a verified packaged-app identity over an App Execution Alias
@@ -242,7 +243,8 @@ def open_file_with_default_app(path: str) -> str:
         return f"Opening {p.name}..."
     if IS_LINUX_DESKTOP:
         if shutil.which("xdg-open") is None:
-            return ToolOutput.failure("Opening files requires xdg-open.")
+            return ToolOutput.failure("Opening files requires xdg-open.",
+                                      status="unsupported")
         try:
             proc = subprocess.Popen(["xdg-open", str(p)],
                                     stdout=subprocess.DEVNULL,
@@ -250,7 +252,8 @@ def open_file_with_default_app(path: str) -> str:
             return f"Opening {p.name}... (PID: {proc.pid})"
         except Exception as e:
             return ToolOutput.failure(f"Could not open {path}: {e}")
-    return ToolOutput.failure("Opening files requires a desktop environment.")
+    return ToolOutput.failure("Opening files requires a desktop environment.",
+                              status="unsupported")
 
 
 def launch_app_from_path(path: str) -> str:

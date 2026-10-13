@@ -110,6 +110,10 @@ printf 'exit\n' | runuser -u emberos-smoke -- env HOME=/home/emberos-smoke /usr/
 test -f /home/emberos-smoke/.local/share/emberos/conversation.sqlite3
 test ! -e /opt/emberos/data
 
+# Exercise every registered Web tool in an isolated temporary workspace.
+runuser -u emberos-smoke -- env HOME=/home/emberos-smoke \
+    /opt/emberos/venv/bin/python /opt/emberos/scripts/smoke_all_tools.py --skip-model
+
 # Load the native Needle engine and make one tool-selection inference.
 runuser -u emberos-smoke -- env HOME=/home/emberos-smoke \
     EMBER_DATA_DIR=/home/emberos-smoke/.local/share/emberos \
