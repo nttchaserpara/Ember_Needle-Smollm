@@ -6,4 +6,5 @@ if [ -z "${EMBER_DATA_DIR:-}" ]; then
     export EMBER_DATA_DIR="$data_home/emberos"
 fi
 
+export PYTHONPATH="/opt/emberos${PYTHONPATH:+:$PYTHONPATH}"
 exec /opt/emberos/venv/bin/python -m emberos "$@"
