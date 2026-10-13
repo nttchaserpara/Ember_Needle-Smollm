@@ -211,16 +211,17 @@ def main() -> int:
                              "tags": ["smoke"]})
         call("search_notes", {"query": "fixture note"})
         call("search_conversation_history", {"query": "smoke", "scope": "all"})
-        task = call("add_task", {"title": "Smoke task"})
+        task = call("add_task", {"title": "Smoke task"}, record_report=False)
         task_id = task.data["id"]
         call("list_tasks", {})
         call("undo_last_action", {"target": "task"})
-        task = call("add_task", {"title": "Smoke completed task"})
+        task = call("add_task", {"title": "Smoke completed task"}, record_report=False)
         task_id = task.data["id"]
         call("complete_task", {"task_id": task_id})
         call("clear_completed_tasks", {}, confirmed=True)
-        task = call("add_task", {"title": "Smoke removed task"})
+        task = call("add_task", {"title": "Smoke removed task"}, record_report=False)
         call("remove_task", {"task_id": task.data["id"]}, confirmed=True)
+        report("add_task", "PASS", "create, undo, complete, and remove flows")
 
         # This kills only a child process started by this test.
         child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
