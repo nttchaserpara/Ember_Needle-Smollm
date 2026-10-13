@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from emberos.config import ROOT_DIR
+from emberos.config import ROOT_DIR, log_dir
 from emberos.outcomes import ToolOutput
 from emberos.platform_detect import IS_LINUX_DESKTOP, IS_WINDOWS
 from emberos.undo import READ_ONLY_TOOLS, UndoManager, UndoEntry
@@ -22,7 +22,7 @@ from emberos.undo import READ_ONLY_TOOLS, UndoManager, UndoEntry
 logger = logging.getLogger("emberos.tools")
 
 # Tool logging to file
-_tools_log_file = ROOT_DIR / "logs" / "tools.log"
+_tools_log_file = log_dir(ROOT_DIR) / "tools.log"
 
 
 def _log_tool_call(name: str, params: dict, result: dict) -> None:

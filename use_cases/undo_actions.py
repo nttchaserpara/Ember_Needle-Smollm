@@ -8,7 +8,7 @@ from pathlib import Path
 import stat
 import subprocess
 
-from emberos.config import ROOT_DIR
+from emberos.config import ROOT_DIR, data_dir
 from emberos.outcomes import ToolOutput
 from emberos.undo import UndoConflict, UndoEntry, UndoUnavailable
 from emberos.platform_detect import IS_WINDOWS as _IS_WINDOWS
@@ -233,8 +233,9 @@ def _prepare_delete_file(params):
     mtime_ns = metadata.st_mtime_ns
     display_path = str(target)
     note_snapshot = None
-    notes_db = ROOT_DIR / "data" / "ember.db"
-    if target.parent.resolve() == (ROOT_DIR / "data" / "notes").resolve() and notes_db.exists():
+    notes_data_dir = data_dir(ROOT_DIR)
+    notes_db = notes_data_dir / "ember.db"
+    if target.parent.resolve() == (notes_data_dir / "notes").resolve() and notes_db.exists():
         from emberos.tools import _get_notes_manager
         note_snapshot = _get_notes_manager().note_for_export(target)
 

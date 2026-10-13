@@ -13,7 +13,7 @@ import time
 import urllib.error
 import urllib.request
 
-from emberos.config import ROOT_DIR
+from emberos.config import ROOT_DIR, log_dir
 
 MODEL_PATH = ROOT_DIR / "models" / "SmolLM2-135M-Instruct-Q4_K_M.gguf"
 _JOB_LOCK = threading.Lock()
@@ -209,8 +209,7 @@ class LocalTextClient:
             reservation.bind(("127.0.0.1", 0))
             port = reservation.getsockname()[1]
         self._base_url = f"http://127.0.0.1:{port}"
-        log_path = ROOT_DIR / "logs" / "llama-server.log"
-        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir(ROOT_DIR) / "llama-server.log"
         self._log = log_path.open("w", encoding="utf-8")
         arguments = [
             "-m", str(self.model_path), "--host", "127.0.0.1", "--port", str(port),

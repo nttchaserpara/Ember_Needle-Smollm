@@ -36,6 +36,9 @@ not make Notepad, Windows audio, or window controls work on a headless Pi.
 
 Additional setup: [document tools](docs/setup/DOCUMENT_TOOLS.md), [Windows audio](docs/setup/AUDIO_TOOLS.md).
 
+For Linux package installation, supported target suites, and the release
+workflow, see [the Debian package guide](docs/setup/DEBIAN_PACKAGE.md).
+
 Run all setup commands from the project root, even when reading a guide in
 `docs/setup/`. A sample document is in `experiments/fixtures/sample-summary.txt`.
 Development test scripts (`experiments/*.py`) and recorded reports

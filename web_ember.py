@@ -43,7 +43,7 @@ from needle_router import route_and_execute
 from emberos.tools import ToolRegistry, ToolResult
 from emberos.benchmark import RequestMemorySampler
 from emberos.responses import format_tool_response
-from emberos.config import ROOT_DIR
+from emberos.config import ROOT_DIR, data_dir, log_dir
 from emberos.memory import ConversationMemory
 from emberos.replies import ReplyRenderer, original_response
 from run_ember import handle_request, _format_bytes, _memory_snapshot
@@ -98,7 +98,7 @@ MAX_BODY_SIZE = 64 * 1024  # 64 KB max payload
 RATE_LIMIT_PER_MINUTE = 40  # Max requests per IP per minute
 
 # Audit log path
-AUDIT_LOG_FILE = ROOT_DIR / "logs" / "web_access.log"
+AUDIT_LOG_FILE = log_dir(ROOT_DIR) / "web_access.log"
 AUDIT_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 
@@ -226,7 +226,7 @@ class EmberWebContext:
         self.memory = None
         if os.environ.get("EMBER_MEMORY", "1") != "0":
             try:
-                self.memory = ConversationMemory(ROOT_DIR / "data" / "conversation.sqlite3")
+                self.memory = ConversationMemory(data_dir(ROOT_DIR) / "conversation.sqlite3")
             except (OSError, sqlite3.Error, ValueError) as exc:
                 print(f"[memory] Conversation memory is unavailable: {exc}")
         self.registry = WebSafeToolRegistry(memory=self.memory)

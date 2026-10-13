@@ -28,6 +28,7 @@ import platform
 import needle
 
 from emberos.undo import READ_ONLY_TOOLS
+from emberos.config import data_dir
 
 # ── Core file/system tools ──────────────────────────────────────────
 @needle.tool
@@ -517,7 +518,7 @@ ALL_TOOLS = [
     undo_last_action,
 ]
 
-needle_agent = needle.Needle(tools=ALL_TOOLS, tool_index_path="tools.idx")
+needle_agent = needle.Needle(tools=ALL_TOOLS, tool_index_path=str(data_dir() / "tools.idx"))
 
 _LOW_CONFIDENCE_PLATFORMS = {"aarch64", "armv7l", "armv6l"}
 

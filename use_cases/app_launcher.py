@@ -8,12 +8,12 @@ import subprocess
 from pathlib import Path
 from emberos.outcomes import ToolOutput
 
-from emberos.config import ROOT_DIR
+from emberos.config import ROOT_DIR, log_dir
 from emberos.platform_detect import IS_LINUX_DESKTOP, IS_WINDOWS
 
 logger = logging.getLogger("emberos.use_cases.app_launcher")
 
-_LAUNCHER_LOG = ROOT_DIR / "logs" / "launcher.log"
+_LAUNCHER_LOG = log_dir(ROOT_DIR) / "launcher.log"
 
 APP_ALIASES = {
     "firefox": "firefox.exe",
