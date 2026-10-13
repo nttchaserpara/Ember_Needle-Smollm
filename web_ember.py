@@ -1693,8 +1693,12 @@ def run_server(host: str = "127.0.0.1", port: int = 8080):
         print("  ⚠️  WARNING: LAN mode is active. Never expose this port to the public internet!")
     print("  Press Ctrl+C to stop the server.\n")
 
-    # Automatically open the browser on local desktop sessions
-    if host == "127.0.0.1" and os.name == "nt":
+    # Automatically open the browser on local desktop sessions. A headless
+    # Linux device still prints the address for access from another machine.
+    has_desktop = os.name == "nt" or bool(
+        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+    )
+    if host == "127.0.0.1" and has_desktop:
         try:
             threading.Timer(0.8, lambda: webbrowser.open(access_url)).start()
         except Exception:

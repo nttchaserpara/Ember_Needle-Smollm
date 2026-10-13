@@ -18,20 +18,25 @@ sudo apt-get update
 sudo apt-get install emberos
 ```
 
-Start the terminal with `emberos`, check the installed version with
-`emberos --version`, or start the local web interface with `emberos-web`.
+Start the chat GUI with `emberos`; it opens a local browser on desktop Linux.
+On a headless Pi, run `emberos --lan`, then open `http://<PI-IP>:8080` from a
+device on the same network and enter the access token printed by EmberOS. Find
+the Pi address with `hostname -I`.
+Use `emberos-cli` (or `emberos --cli`) for the terminal interface. Check the
+installed version with `emberos --version`.
 State, notes, tasks, and logs live under `${XDG_DATA_HOME:-~/.local/share}/emberos`
 for the current user. Removing the package leaves this user data in place.
 
 ## Check an installed device
 
 On each Raspberry Pi or lab Linux machine, confirm the package architecture and
-version, then check that the terminal starts as the ordinary login user:
+version, then check the GUI launcher and terminal fallback as the ordinary
+login user:
 
 ```sh
 dpkg --print-architecture
 emberos --version
-printf 'exit\n' | emberos
+printf 'exit\n' | emberos-cli
 ```
 
 To test Needle's natural-language tool selection without performing real
@@ -49,7 +54,7 @@ the actual terminal, such as creating/searching a note and adding/listing a
 task:
 
 ```sh
-emberos
+emberos-cli
 ```
 
 For example, enter `Create a note titled 'Pi smoke' with content 'EmberOS test'`,
@@ -74,9 +79,11 @@ The package currently targets these Debian-family releases and architectures
 only. It preserves the Linux capabilities already present in EmberOS; Windows
 audio, brightness, and other unported desktop tools are not added by packaging.
 The build workflow tests installation from a signed test APT repository, user
-permissions, Needle routing inference, and a local model summary. Its arm64 job
-runs on a hosted arm64 Linux runner; this does not replace testing on the actual
-Raspberry Pi model and lab devices.
+permissions, the packaged GUI page and API authentication, Needle routing
+inference, and a local model summary. Its arm64 job runs on a hosted arm64 Linux
+runner; this does not replace testing on the actual Raspberry Pi model and lab
+devices. It does not execute every registered tool; platform-specific and
+side-effecting tools need separate device checks.
 
 ## Maintainer release
 

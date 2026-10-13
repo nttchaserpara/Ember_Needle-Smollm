@@ -43,7 +43,7 @@ for suite in bookworm jammy noble; do
         jammy|noble) arches="amd64" ;;
     esac
     for arch in $arches; do
-        deb="$DEB_DIR/emberos_0.0.1-1_${suite}_${arch}.deb"
+        deb="$DEB_DIR/emberos_0.0.1-2_${suite}_${arch}.deb"
         if [[ ! -s "$deb" ]]; then
             echo "Missing build artifact: $deb" >&2
             exit 1

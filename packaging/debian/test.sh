@@ -52,8 +52,61 @@ useradd --create-home emberos-smoke
 version=$(runuser -u emberos-smoke -- env HOME=/home/emberos-smoke /usr/bin/emberos --version)
 test "$version" = "EmberOS 0.0.1"
 
+# Confirm `emberos` is the graphical Web GUI entry point and retain an explicit
+# CLI command for headless terminal use.
+web_help=$(runuser -u emberos-smoke -- env HOME=/home/emberos-smoke /usr/bin/emberos --help)
+printf '%s\n' "$web_help" | grep -q 'EmberOS Web GUI Server'
+cli_version=$(runuser -u emberos-smoke -- env HOME=/home/emberos-smoke /usr/bin/emberos-cli --version)
+test "$cli_version" = "EmberOS 0.0.1"
+
+# Start the packaged GUI in headless mode and verify the page and API auth gate.
+runuser -u emberos-smoke -- env HOME=/home/emberos-smoke \
+    EMBER_DATA_DIR=/home/emberos-smoke/.local/share/emberos \
+    PYTHONPATH=/opt/emberos \
+    /opt/emberos/venv/bin/python - <<'PY'
+import socket
+import subprocess
+import time
+import urllib.error
+import urllib.request
+
+with socket.socket() as probe:
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+
+process = subprocess.Popen(
+    ["/usr/bin/emberos", "--host", "127.0.0.1", "--port", str(port)],
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.PIPE,
+    text=True,
+)
+base = f"http://127.0.0.1:{port}"
+try:
+    deadline = time.monotonic() + 15
+    while True:
+        try:
+            with urllib.request.urlopen(base + "/", timeout=1) as response:
+                page = response.read().decode("utf-8")
+                assert response.status == 200 and "ZEVION Labs" in page
+            break
+        except (OSError, urllib.error.URLError):
+            if process.poll() is not None or time.monotonic() >= deadline:
+                raise RuntimeError("Packaged EmberOS GUI did not start")
+            time.sleep(0.1)
+
+    try:
+        urllib.request.urlopen(base + "/api/status", timeout=2)
+    except urllib.error.HTTPError as error:
+        assert error.code == 401, error.code
+    else:
+        raise AssertionError("GUI API accepted a request without its token")
+finally:
+    process.terminate()
+    process.wait(timeout=5)
+PY
+
 # Launch the actual terminal as an unprivileged user and initialize its data.
-printf 'exit\n' | runuser -u emberos-smoke -- env HOME=/home/emberos-smoke /usr/bin/emberos
+printf 'exit\n' | runuser -u emberos-smoke -- env HOME=/home/emberos-smoke /usr/bin/emberos-cli
 test -f /home/emberos-smoke/.local/share/emberos/conversation.sqlite3
 test ! -e /opt/emberos/data
 

@@ -6,7 +6,7 @@ OUTPUT_DIR=${OUTPUT_DIR:-/out}
 SUITE=${SUITE:?Set SUITE to bookworm, jammy, or noble}
 ARCH=${ARCH:-$(dpkg --print-architecture)}
 UPSTREAM_VERSION=${UPSTREAM_VERSION:-0.0.1}
-DEB_VERSION=${DEB_VERSION:-${UPSTREAM_VERSION}-1}
+DEB_VERSION=${DEB_VERSION:-${UPSTREAM_VERSION}-2}
 BUILD_JOBS=${BUILD_JOBS:-2}
 APP_ROOT=/opt/emberos
 
@@ -92,6 +92,7 @@ trap 'rm -rf "$llama_source" "$llama_build" "$stage"' EXIT
 install -d "$stage/DEBIAN" "$stage/opt" "$stage/usr/bin" "$stage/usr/share/doc/emberos"
 cp -a "$APP_ROOT" "$stage/opt/emberos"
 install -m 0755 "$SOURCE_DIR/packaging/bin/emberos" "$stage/usr/bin/emberos"
+install -m 0755 "$SOURCE_DIR/packaging/bin/emberos-cli" "$stage/usr/bin/emberos-cli"
 install -m 0755 "$SOURCE_DIR/packaging/bin/emberos-web" "$stage/usr/bin/emberos-web"
 apache_license=$(find "$APP_ROOT/venv/lib" \
     -path '*/cactus_needle-2.0.11.dist-info/licenses/LICENSE' \

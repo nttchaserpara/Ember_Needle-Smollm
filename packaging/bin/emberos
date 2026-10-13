@@ -7,4 +7,16 @@ if [ -z "${EMBER_DATA_DIR:-}" ]; then
 fi
 
 export PYTHONPATH="/opt/emberos${PYTHONPATH:+:$PYTHONPATH}"
-exec /opt/emberos/venv/bin/python -m emberos "$@"
+
+case "${1:-}" in
+    --version|-V)
+        exec /opt/emberos/venv/bin/python -m emberos "$@"
+        ;;
+    --cli)
+        shift
+        exec /opt/emberos/venv/bin/python -m emberos "$@"
+        ;;
+    *)
+        exec /opt/emberos/venv/bin/python /opt/emberos/web_ember.py "$@"
+        ;;
+esac
