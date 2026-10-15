@@ -9,7 +9,7 @@ standalone Edge window through an encrypted SSH tunnel.
 
 1. Download and unzip `emberos-companion-windows` from a successful GitHub
    Actions run, then start `EmberOS-Connect.exe` on the Windows laptop.
-2. On the Pi, run `emberos --lan` as the same ordinary Linux account you use
+2. On the Pi, run `emberos` as the same ordinary Linux account you use
    for SSH, and leave it running.
 3. Select the discovered Pi and click **Pair / Open EmberOS**. Enter the Pi's
    SSH username and password. For SSH-key login, leave the password blank.
@@ -27,9 +27,12 @@ companion opens the GUI when it discovers the paired Pi. Turn on **Run
 companion when Windows signs in** if you want discovery to stay active in the
 background.
 
-Windows and the Pi must share a network that permits multicast DNS discovery
-and SSH on port 22. Allow the app on Private networks if Windows Firewall asks.
-The companion currently supports IPv4 discovery and SSH password or key-based
+The web server stays bound to the Pi's loopback address; the companion reaches
+it through the SSH tunnel, so the GUI port does not need to be opened on the
+LAN. To use a direct browser instead, run `emberos --lan` on the Pi. Windows
+and the Pi must share a network that permits multicast DNS discovery and SSH
+on port 22. Allow the app on Private networks if Windows Firewall asks. The
+companion currently supports IPv4 discovery and SSH password or key-based
 login.
 
 ## Build locally

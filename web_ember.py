@@ -1678,7 +1678,7 @@ def run_server(host: str = "127.0.0.1", port: int = 8080):
     server.ctx = ctx
 
     lan_advertisement = None
-    if host == "0.0.0.0":
+    if host in ("127.0.0.1", "0.0.0.0"):
         try:
             from emberos.web_discovery import advertise_lan_web_session
 
