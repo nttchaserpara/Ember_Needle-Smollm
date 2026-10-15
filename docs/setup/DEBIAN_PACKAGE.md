@@ -131,13 +131,42 @@ Pi model and lab devices.
 
 ## Maintainer release
 
-Enable GitHub Pages with **GitHub Actions** as the publishing source. Create a
-dedicated OpenPGP signing key for the APT repository, then save its armored
-private key in the GitHub Actions secret `APT_SIGNING_KEY` and its passphrase in
-`APT_SIGNING_PASSPHRASE`. Keep the private key outside the repository. Publish
-the first version by pushing the tag `v0.0.1`; the workflow builds and smoke
-tests all four packages, creates GitHub release downloads, signs the APT index,
-and deploys the repository to Pages.
+The publishing workflow runs only for the exact tag `v0.0.1`. Before creating
+that tag:
+
+1. Merge the packaging changes into the repository's default branch.
+2. In **Settings → Pages**, set the publishing source to **GitHub Actions**.
+3. On a trusted computer with GnuPG installed, create a dedicated signing key
+   and export its private key. GnuPG will ask you to set a passphrase:
+
+   ```powershell
+   gpg --quick-generate-key "EmberOS APT Archive <packages@emberos.invalid>" rsa3072 sign 3y
+   gpg --list-secret-keys --keyid-format long --fingerprint
+   gpg --armor --output "$env:USERPROFILE\emberos-apt-signing-key.asc" --export-secret-keys FINGERPRINT
+   ```
+
+   Replace `FINGERPRINT` with the key fingerprint shown by the second command.
+   Keep the exported key and its passphrase private; never commit or send them.
+   Add these repository secrets under **Settings → Secrets and variables → Actions**:
+   - `APT_SIGNING_KEY`: the complete armored private key, including the
+     `BEGIN` and `END PGP PRIVATE KEY BLOCK` lines from the exported file.
+   - `APT_SIGNING_PASSPHRASE`: the passphrase used for that key.
+4. From an up-to-date checkout of the default branch, create and push the
+   release tag:
+
+   ```sh
+   git switch main
+   git pull --ff-only
+   git tag -a v0.0.1 -m "EmberOS 0.0.1"
+   git push origin v0.0.1
+   ```
+
+The tag starts the workflow. It builds and smoke-tests all four Debian
+packages, builds both desktop companion apps, creates GitHub release downloads,
+signs the APT index, and deploys the repository to Pages. Wait for the
+`publish` job to finish successfully before sharing the installation command.
+Do not create the tag on the feature branch: the workflow would publish the
+commit that the tag points to, whether or not it has been merged.
 
 The APT setup script selects the package suite from `/etc/os-release` and the
 CPU architecture from `dpkg`. It rejects other suites and architectures with a
