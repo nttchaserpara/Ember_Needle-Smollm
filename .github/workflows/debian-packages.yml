@@ -1,0 +1,164 @@
+name: Build and smoke-test Debian packages
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: bookworm
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            image: arm64v8/debian:bookworm
+          - suite: bookworm
+            arch: amd64
+            runner: ubuntu-24.04
+            image: debian:bookworm
+          - suite: jammy
+            arch: amd64
+            runner: ubuntu-24.04
+            image: ubuntu:22.04
+          - suite: noble
+            arch: amd64
+            runner: ubuntu-24.04
+            image: ubuntu:24.04
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build package in target distribution
+        env:
+          SUITE: ${{ matrix.suite }}
+          ARCH: ${{ matrix.arch }}
+          IMAGE: ${{ matrix.image }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/emberos-debs"
+          docker run --rm \
+            --platform "linux/${ARCH}" \
+            -e SUITE -e ARCH -e UPSTREAM_VERSION=0.0.1 \
+            -v "$GITHUB_WORKSPACE:/src:ro" \
+            -v "$RUNNER_TEMP/emberos-debs:/out" \
+            "$IMAGE" bash /src/packaging/debian/build.sh
+      - name: Install and smoke-test the package
+        env:
+          ARCH: ${{ matrix.arch }}
+          IMAGE: ${{ matrix.image }}
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/src:ro" \
+            -v "$RUNNER_TEMP/emberos-debs:/out:ro" \
+            "$IMAGE" bash /src/packaging/debian/test.sh \
+              "/out/emberos_0.0.1-3_${{ matrix.suite }}_${{ matrix.arch }}.deb" \
+              "${{ matrix.suite }}" "${{ matrix.arch }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: emberos-${{ matrix.suite }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/emberos-debs/*.deb
+          if-no-files-found: error
+
+  windows-companion:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install companion build dependencies
+        run: python -m pip install -r desktop/companion/requirements.txt
+      - name: Test discovery parsing
+        run: python -m unittest scripts.test_emberos_companion -v
+      - name: Build standalone Windows app
+        run: >-
+          python -m PyInstaller --noconfirm --clean --onefile --windowed
+          --name EmberOS-Connect --collect-all zeroconf
+          --hidden-import keyring.backends.Windows
+          --distpath dist/companion --workpath build/companion/work
+          --specpath build/companion desktop/companion/emberos_connect.py
+      - name: Test packaged app dependencies
+        run: '& "$PWD\dist\companion\EmberOS-Connect.exe" --self-test'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: emberos-companion-windows
+          path: dist/companion/EmberOS-Connect.exe
+          if-no-files-found: error
+
+  linux-companion:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Tk runtime for Python
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-tk python3-venv
+      - name: Create build environment and install companion dependencies
+        run: |
+          python3 -m venv --system-site-packages .venv
+          .venv/bin/python -m pip install -r desktop/companion/requirements.txt
+      - name: Test discovery and Linux desktop support
+        run: |
+          .venv/bin/python -m unittest scripts.test_emberos_companion scripts.test_gui_launcher -v
+          .venv/bin/python desktop/companion/emberos_connect.py --self-test
+      - name: Build standalone Linux app
+        run: >-
+          .venv/bin/python -m PyInstaller --noconfirm --clean --onefile --windowed
+          --name EmberOS-Connect --collect-all zeroconf
+          --hidden-import keyring.backends.SecretService --hidden-import secretstorage
+          --distpath dist/companion --workpath build/companion/work
+          --specpath build/companion desktop/companion/emberos_connect.py
+      - name: Test packaged app dependencies
+        run: dist/companion/EmberOS-Connect --self-test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: emberos-companion-linux-amd64
+          path: dist/companion/EmberOS-Connect
+          if-no-files-found: error
+
+  publish:
+    if: github.ref == 'refs/tags/v0.0.1'
+    needs: [package, windows-companion, linux-companion]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: emberos-*
+          path: ${{ runner.temp }}/emberos-debs
+          merge-multiple: true
+      - name: Build signed APT repository
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+          APT_SIGNING_PASSPHRASE: ${{ secrets.APT_SIGNING_PASSPHRASE }}
+        run: |
+          if [[ -z "$APT_SIGNING_KEY" || -z "$APT_SIGNING_PASSPHRASE" ]]; then
+            echo "Set APT_SIGNING_KEY and APT_SIGNING_PASSPHRASE before publishing v0.0.1." >&2
+            exit 1
+          fi
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends apt-utils dpkg-dev gnupg
+          bash packaging/apt/publish.sh \
+            "$RUNNER_TEMP/emberos-debs" "$RUNNER_TEMP/emberos-pages" "$GITHUB_WORKSPACE"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ runner.temp }}/emberos-pages
+      - name: Publish GitHub release downloads
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ runner.temp }}/emberos-debs/*
+      - name: Deploy APT repository to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Report package repository URL
+        run: echo "APT repository published at ${{ steps.deployment.outputs.page_url }}"

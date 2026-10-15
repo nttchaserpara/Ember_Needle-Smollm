@@ -6,11 +6,11 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-from emberos.config import ROOT_DIR
+from emberos.config import ROOT_DIR, data_dir
 
 logger = logging.getLogger("emberos.use_cases.tasks")
 
-_DB_PATH = ROOT_DIR / "data" / "ember.db"
+_DB_PATH = data_dir(ROOT_DIR) / "ember.db"
 _TASK_COLUMNS = "id, title, due_date, priority, created_at, completed, completed_at"
 
 

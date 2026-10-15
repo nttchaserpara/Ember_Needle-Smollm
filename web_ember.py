@@ -35,7 +35,6 @@ import sys
 import threading
 import time
 import urllib.parse
-import webbrowser
 
 sys.path.insert(0, ".")
 
@@ -43,9 +42,10 @@ from needle_router import route_and_execute
 from emberos.tools import ToolRegistry, ToolResult
 from emberos.benchmark import RequestMemorySampler
 from emberos.responses import format_tool_response
-from emberos.config import ROOT_DIR
+from emberos.config import ROOT_DIR, data_dir, log_dir
 from emberos.memory import ConversationMemory
 from emberos.replies import ReplyRenderer, original_response
+from emberos.gui_launcher import open_gui_window as _open_gui_window
 from run_ember import handle_request, _format_bytes, _memory_snapshot
 
 _PROCESS = psutil.Process(os.getpid())
@@ -98,7 +98,7 @@ MAX_BODY_SIZE = 64 * 1024  # 64 KB max payload
 RATE_LIMIT_PER_MINUTE = 40  # Max requests per IP per minute
 
 # Audit log path
-AUDIT_LOG_FILE = ROOT_DIR / "logs" / "web_access.log"
+AUDIT_LOG_FILE = log_dir(ROOT_DIR) / "web_access.log"
 AUDIT_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 
@@ -226,7 +226,7 @@ class EmberWebContext:
         self.memory = None
         if os.environ.get("EMBER_MEMORY", "1") != "0":
             try:
-                self.memory = ConversationMemory(ROOT_DIR / "data" / "conversation.sqlite3")
+                self.memory = ConversationMemory(data_dir(ROOT_DIR) / "conversation.sqlite3")
             except (OSError, sqlite3.Error, ValueError) as exc:
                 print(f"[memory] Conversation memory is unavailable: {exc}")
         self.registry = WebSafeToolRegistry(memory=self.memory)
@@ -1677,7 +1677,17 @@ def run_server(host: str = "127.0.0.1", port: int = 8080):
     server = HTTPServer((host, port), EmberHTTPHandler)
     server.ctx = ctx
 
-    access_url = f"http://{'localhost' if host == '127.0.0.1' else host}:{port}/?token={auth_token}"
+    lan_advertisement = None
+    if host in ("127.0.0.1", "0.0.0.0"):
+        try:
+            from emberos.web_discovery import advertise_lan_web_session
+
+            lan_advertisement = advertise_lan_web_session(auth_token, server.server_port)
+        except Exception as exc:
+            print(f"[discovery] Companion discovery is unavailable: {type(exc).__name__}: {exc}")
+
+    access_host = "localhost" if host in ("127.0.0.1", "0.0.0.0") else host
+    access_url = f"http://{access_host}:{server.server_port}/?token={auth_token}"
 
     print("=" * 72)
     print("  🔥 EmberOS Web GUI Server")
@@ -1686,6 +1696,8 @@ def run_server(host: str = "127.0.0.1", port: int = 8080):
     print(f"  [SECURITY] Bound Address : {host} ({'Localhost Only' if host == '127.0.0.1' else 'LAN Network Mode'})")
     print(f"  [SECURITY] Access Token  : {auth_token}")
     print(f"  [SECURITY] Allowlist     : {len(WEB_SAFE_TOOLS)} safe + {len(WEB_CONFIRM_TOOLS)} confirmation-required tools active")
+    if lan_advertisement is not None:
+        print("  [COMPANION] Discovered on this network; EmberOS Connect can open the app window.")
     print("-" * 72)
     print(f"  👉 Open in Browser: {access_url}")
     print("-" * 72)
@@ -1693,18 +1705,21 @@ def run_server(host: str = "127.0.0.1", port: int = 8080):
         print("  ⚠️  WARNING: LAN mode is active. Never expose this port to the public internet!")
     print("  Press Ctrl+C to stop the server.\n")
 
-    # Automatically open the browser on local desktop sessions
-    if host == "127.0.0.1" and os.name == "nt":
-        try:
-            threading.Timer(0.8, lambda: webbrowser.open(access_url)).start()
-        except Exception:
-            pass
+    # Automatically open the browser on local desktop sessions. A headless
+    # Linux device still prints the address for access from another machine.
+    has_desktop = os.name == "nt" or bool(
+        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+    )
+    if host in ("127.0.0.1", "0.0.0.0") and has_desktop:
+        threading.Timer(0.8, lambda: _open_gui_window(access_url)).start()
 
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\n[INFO] Stopping EmberOS Web Server...")
     finally:
+        if lan_advertisement is not None:
+            lan_advertisement.close()
         server.server_close()
 
 

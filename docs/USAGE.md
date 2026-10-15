@@ -8,7 +8,8 @@ Langsung ke: [Windows](#2-menjalankan-di-windows--terminal-vs-code),
 [prompt sederhana](#3-prompt-sederhana-untuk-mulai),
 [summarize](#4-summarize-dokumen), [memory](#5-memory-percakapan),
 [balasan natural](#balasan-natural),
-[Pi/SSH](#7-menjalankan-di-pi-melalui-ssh).
+[Pi/SSH](#7-menjalankan-di-pi-melalui-ssh),
+[paket Linux](setup/DEBIAN_PACKAGE.md).
 
 ## 1. Bedakan terminal dengan prompt Ember
 
@@ -604,6 +605,14 @@ mengizinkan hanya eksekusi undo atas task sementara, dan memeriksa bahwa undo
 kedua tidak membatalkan tindakan yang lebih lama. Data pengguna dan perangkat
 volume/brightness tidak diubah. Panduan [undo](setup/UNDO.md) mencatat kontrak,
 command evaluasi routing, dan batas pengujian fisik.
+
+## Install dari repositori paket Debian
+
+Setelah repositori APT bertanda tangan dipublikasikan, konfigurasi sumbernya
+satu kali sesuai [panduan paket Linux](setup/DEBIAN_PACKAGE.md), lalu jalankan
+`sudo apt-get install emberos`. Mulai terminal dengan `emberos`. Panduan paket
+mencantumkan rilis Debian/Ubuntu dan arsitektur yang didukung serta batas fitur
+Linux yang perlu diketahui.
 
 ## Pemeliharaan panduan
 

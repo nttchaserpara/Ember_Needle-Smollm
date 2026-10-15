@@ -11,6 +11,19 @@ runtimes/
 *.egg-info/
 .local/
 
+# Local Debian package build artifacts.
+/build/
+/dist/
+*.deb
+*.changes
+*.buildinfo
+
+# Private working notes that are not part of the EmberOS source/release.
+/INSTRUKSI_REVISI_PPT_MASALAH_A.md
+/INSTRUKSI_REVISI_PPT_MASALAH_A_v2.md
+/analisis_paper_tinyllm_agentx.md
+/docs/research/
+
 # Local development tests and recorded evaluation reports.
 # Keep small input fixtures and routing cases for on-device benchmarks.
 /experiments/*.py

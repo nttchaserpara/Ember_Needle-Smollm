@@ -14,19 +14,20 @@ import sys
 import threading
 import time
 from copy import deepcopy
+from pathlib import Path
 
 import psutil
 
 _PROCESS = psutil.Process(os.getpid())
 _PROGRAM_STARTED = time.perf_counter()
 
-sys.path.insert(0, ".")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from needle_router import route_and_execute
 from emberos.tools import ToolRegistry, ToolResult
 from emberos.benchmark import RequestMemorySampler
 from emberos.responses import format_tool_response
-from emberos.config import ROOT_DIR
+from emberos.config import ROOT_DIR, data_dir
 from emberos.memory import ConversationMemory, memory_command
 from emberos.replies import ReplyRenderer, original_response
 
@@ -350,7 +351,7 @@ def main():
     memory = None
     if os.environ.get("EMBER_MEMORY", "1") != "0":
         try:
-            memory = ConversationMemory(ROOT_DIR / "data" / "conversation.sqlite3")
+            memory = ConversationMemory(data_dir(ROOT_DIR) / "conversation.sqlite3")
         except (OSError, sqlite3.Error, ValueError) as exc:
             print(f"[memory] Conversation memory is unavailable: {exc}")
     registry = ToolRegistry(memory=memory)

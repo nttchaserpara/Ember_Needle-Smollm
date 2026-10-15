@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from emberos.config import ROOT_DIR
+from emberos.config import ROOT_DIR, log_dir
 from emberos.outcomes import ToolOutput
 from emberos.platform_detect import IS_LINUX_DESKTOP, IS_WINDOWS
 from emberos.undo import READ_ONLY_TOOLS, UndoManager, UndoEntry
@@ -22,7 +22,7 @@ from emberos.undo import READ_ONLY_TOOLS, UndoManager, UndoEntry
 logger = logging.getLogger("emberos.tools")
 
 # Tool logging to file
-_tools_log_file = ROOT_DIR / "logs" / "tools.log"
+_tools_log_file = log_dir(ROOT_DIR) / "tools.log"
 
 
 def _log_tool_call(name: str, params: dict, result: dict) -> None:
@@ -1030,7 +1030,7 @@ def _tool_get_clipboard() -> str:
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
                 return ToolOutput.failure(f"Could not read clipboard: {exc}")
         return ToolOutput.failure("Clipboard requires xclip or xsel.")
-    return ToolOutput.failure("Clipboard requires a desktop environment.")
+    return ToolOutput.failure("Clipboard requires a desktop environment.", status="unsupported")
 
 
 def _tool_set_clipboard(text: str) -> str:
@@ -1055,7 +1055,7 @@ def _tool_set_clipboard(text: str) -> str:
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
                 return ToolOutput.failure(f"Could not update clipboard: {exc}")
         return ToolOutput.failure("Clipboard requires xclip or xsel.")
-    return ToolOutput.failure("Clipboard requires a desktop environment.")
+    return ToolOutput.failure("Clipboard requires a desktop environment.", status="unsupported")
 
 
 def _tool_open_file(path: str) -> str:
@@ -1079,7 +1079,8 @@ def _tool_open_file(path: str) -> str:
             return f"Opened {p} (PID: {proc.pid})"
         except Exception as e:
             return ToolOutput.failure(f"Could not open {p}: {e}")
-    return ToolOutput.failure("Opening files requires a desktop environment.")
+    return ToolOutput.failure("Opening files requires a desktop environment.",
+                              status="unsupported")
 
 
 def _tool_search_web(url: str) -> str:
@@ -1106,7 +1107,8 @@ def _tool_get_active_window() -> str:
             return result.stdout.strip() or "(no active window)"
         except Exception as e:
             return ToolOutput.failure(f"Could not read active window: {e}")
-    return ToolOutput.failure("Active-window queries require a desktop environment.")
+    return ToolOutput.failure("Active-window queries require a desktop environment.",
+                              status="unsupported")
 
 
 def _tool_close_window(title: str) -> str:
