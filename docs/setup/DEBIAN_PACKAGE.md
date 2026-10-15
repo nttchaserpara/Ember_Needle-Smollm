@@ -19,9 +19,29 @@ sudo apt-get install emberos
 ```
 
 Start the chat GUI with `emberos`; it opens a local browser on desktop Linux.
-On a headless Pi, run `emberos --lan`, then open `http://<PI-IP>:8080` from a
-device on the same network and enter the access token printed by EmberOS. Find
-the Pi address with `hostname -I`.
+For a headless Pi, use the Windows companion so the GUI opens on your laptop
+without manually entering the Pi address or access token. Download the
+`emberos-companion-windows` artifact from a successful GitHub Actions run, unzip
+it, and launch `EmberOS-Connect.exe`. On the Pi, run `emberos --lan` as your
+normal login user and leave it running. The companion discovers the Pi on the
+same local network, then on first use asks for the Linux username/password and
+SSH host fingerprint. Compare the displayed fingerprint with this command on
+the Pi before accepting:
+
+```sh
+for key in /etc/ssh/ssh_host_*_key.pub; do sudo ssh-keygen -lf "$key"; done
+```
+
+The password is saved in Windows Credential Manager; the short-lived web token
+is read over SSH and is never announced on the network. Later, the companion
+opens the app window automatically when it finds the paired Pi. The optional
+startup checkbox keeps discovery running after you sign in to Windows. Allow
+the companion on Private networks if Windows Firewall asks. Discovery needs
+the laptop and Pi on the same network, with mDNS and SSH (port 22) available.
+
+If you do not want to use the companion, `emberos --lan` still prints the
+manual browser URL and token for direct access. Find the Pi address with
+`hostname -I`.
 Use `emberos-cli` (or `emberos --cli`) for the terminal interface. Check the
 installed version with `emberos --version`.
 State, notes, tasks, and logs live under `${XDG_DATA_HOME:-~/.local/share}/emberos`

@@ -1677,7 +1677,17 @@ def run_server(host: str = "127.0.0.1", port: int = 8080):
     server = HTTPServer((host, port), EmberHTTPHandler)
     server.ctx = ctx
 
-    access_url = f"http://{'localhost' if host == '127.0.0.1' else host}:{port}/?token={auth_token}"
+    lan_advertisement = None
+    if host == "0.0.0.0":
+        try:
+            from emberos.web_discovery import advertise_lan_web_session
+
+            lan_advertisement = advertise_lan_web_session(auth_token, server.server_port)
+        except Exception as exc:
+            print(f"[discovery] Companion discovery is unavailable: {type(exc).__name__}: {exc}")
+
+    access_host = "localhost" if host in ("127.0.0.1", "0.0.0.0") else host
+    access_url = f"http://{access_host}:{server.server_port}/?token={auth_token}"
 
     print("=" * 72)
     print("  🔥 EmberOS Web GUI Server")
@@ -1686,6 +1696,8 @@ def run_server(host: str = "127.0.0.1", port: int = 8080):
     print(f"  [SECURITY] Bound Address : {host} ({'Localhost Only' if host == '127.0.0.1' else 'LAN Network Mode'})")
     print(f"  [SECURITY] Access Token  : {auth_token}")
     print(f"  [SECURITY] Allowlist     : {len(WEB_SAFE_TOOLS)} safe + {len(WEB_CONFIRM_TOOLS)} confirmation-required tools active")
+    if lan_advertisement is not None:
+        print("  [COMPANION] Discovered on this network; EmberOS Connect can open the app window.")
     print("-" * 72)
     print(f"  👉 Open in Browser: {access_url}")
     print("-" * 72)
@@ -1698,7 +1710,7 @@ def run_server(host: str = "127.0.0.1", port: int = 8080):
     has_desktop = os.name == "nt" or bool(
         os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
     )
-    if host == "127.0.0.1" and has_desktop:
+    if host in ("127.0.0.1", "0.0.0.0") and has_desktop:
         try:
             threading.Timer(0.8, lambda: webbrowser.open(access_url)).start()
         except Exception:
@@ -1709,6 +1721,8 @@ def run_server(host: str = "127.0.0.1", port: int = 8080):
     except KeyboardInterrupt:
         print("\n[INFO] Stopping EmberOS Web Server...")
     finally:
+        if lan_advertisement is not None:
+            lan_advertisement.close()
         server.server_close()
 
 

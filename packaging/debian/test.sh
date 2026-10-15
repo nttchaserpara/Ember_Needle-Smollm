@@ -114,6 +114,11 @@ test ! -e /opt/emberos/data
 runuser -u emberos-smoke -- env HOME=/home/emberos-smoke \
     /opt/emberos/venv/bin/python /opt/emberos/scripts/smoke_all_tools.py --skip-model
 
+# Verify the private LAN session and mDNS record contract without opening a
+# multicast socket or exposing the web token on the test network.
+runuser -u emberos-smoke -- env HOME=/home/emberos-smoke \
+    /opt/emberos/venv/bin/python /opt/emberos/scripts/test_web_discovery.py
+
 # Load the native Needle engine and make one tool-selection inference.
 runuser -u emberos-smoke -- env HOME=/home/emberos-smoke \
     EMBER_DATA_DIR=/home/emberos-smoke/.local/share/emberos \

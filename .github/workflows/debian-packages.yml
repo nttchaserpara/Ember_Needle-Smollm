@@ -56,7 +56,7 @@ jobs:
             -v "$GITHUB_WORKSPACE:/src:ro" \
             -v "$RUNNER_TEMP/emberos-debs:/out:ro" \
             "$IMAGE" bash /src/packaging/debian/test.sh \
-              "/out/emberos_0.0.1-2_${{ matrix.suite }}_${{ matrix.arch }}.deb" \
+              "/out/emberos_0.0.1-3_${{ matrix.suite }}_${{ matrix.arch }}.deb" \
               "${{ matrix.suite }}" "${{ matrix.arch }}"
       - uses: actions/upload-artifact@v4
         with:
@@ -64,9 +64,35 @@ jobs:
           path: ${{ runner.temp }}/emberos-debs/*.deb
           if-no-files-found: error
 
+  windows-companion:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install companion build dependencies
+        run: python -m pip install -r desktop/companion/requirements.txt
+      - name: Test discovery parsing
+        run: python -m unittest scripts.test_emberos_companion -v
+      - name: Build standalone Windows app
+        run: >-
+          python -m PyInstaller --noconfirm --clean --onefile --windowed
+          --name EmberOS-Connect --collect-all zeroconf
+          --hidden-import keyring.backends.Windows
+          --distpath dist/companion --workpath build/companion/work
+          --specpath build/companion desktop/companion/emberos_connect.py
+      - name: Test packaged app dependencies
+        run: '& "$PWD\dist\companion\EmberOS-Connect.exe" --self-test'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: emberos-companion-windows
+          path: dist/companion/EmberOS-Connect.exe
+          if-no-files-found: error
+
   publish:
     if: github.ref == 'refs/tags/v0.0.1'
-    needs: package
+    needs: [package, windows-companion]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -99,7 +125,7 @@ jobs:
       - name: Publish GitHub release downloads
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ runner.temp }}/emberos-debs/*.deb
+          files: ${{ runner.temp }}/emberos-debs/*
       - name: Deploy APT repository to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
