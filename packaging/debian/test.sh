@@ -119,6 +119,11 @@ runuser -u emberos-smoke -- env HOME=/home/emberos-smoke \
 runuser -u emberos-smoke -- env HOME=/home/emberos-smoke \
     /opt/emberos/venv/bin/python /opt/emberos/scripts/test_web_discovery.py
 
+# The same package launcher should open an app window on Linux desktops and
+# fall back cleanly when Chromium-family browsers are unavailable.
+runuser -u emberos-smoke -- env HOME=/home/emberos-smoke \
+    /opt/emberos/venv/bin/python /opt/emberos/scripts/test_gui_launcher.py
+
 # Load the native Needle engine and make one tool-selection inference.
 runuser -u emberos-smoke -- env HOME=/home/emberos-smoke \
     EMBER_DATA_DIR=/home/emberos-smoke/.local/share/emberos \

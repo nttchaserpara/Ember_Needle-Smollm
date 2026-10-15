@@ -90,9 +90,40 @@ jobs:
           path: dist/companion/EmberOS-Connect.exe
           if-no-files-found: error
 
+  linux-companion:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Tk runtime for Python
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-tk python3-venv
+      - name: Create build environment and install companion dependencies
+        run: |
+          python3 -m venv --system-site-packages .venv
+          .venv/bin/python -m pip install -r desktop/companion/requirements.txt
+      - name: Test discovery and Linux desktop support
+        run: |
+          .venv/bin/python -m unittest scripts.test_emberos_companion scripts.test_gui_launcher -v
+          .venv/bin/python desktop/companion/emberos_connect.py --self-test
+      - name: Build standalone Linux app
+        run: >-
+          .venv/bin/python -m PyInstaller --noconfirm --clean --onefile --windowed
+          --name EmberOS-Connect --collect-all zeroconf
+          --hidden-import keyring.backends.SecretService --hidden-import secretstorage
+          --distpath dist/companion --workpath build/companion/work
+          --specpath build/companion desktop/companion/emberos_connect.py
+      - name: Test packaged app dependencies
+        run: dist/companion/EmberOS-Connect --self-test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: emberos-companion-linux-amd64
+          path: dist/companion/EmberOS-Connect
+          if-no-files-found: error
+
   publish:
     if: github.ref == 'refs/tags/v0.0.1'
-    needs: [package, windows-companion]
+    needs: [package, windows-companion, linux-companion]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

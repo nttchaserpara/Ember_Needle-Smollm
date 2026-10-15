@@ -1,4 +1,5 @@
 keyring>=25,<26
 paramiko>=3.5,<5
 pyinstaller>=6.14,<7
+SecretStorage>=3.3,<4; sys_platform == "linux"
 zeroconf>=0.151,<0.152

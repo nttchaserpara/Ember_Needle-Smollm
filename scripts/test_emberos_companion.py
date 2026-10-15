@@ -3,12 +3,19 @@
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "desktop" / "companion"))
 
-from emberos_connect import _device_from_service_info
+from emberos_connect import (
+    _app_config_dir,
+    _app_browser,
+    _desktop_exec_arg,
+    _device_from_service_info,
+    _linux_autostart_file,
+)
 
 
 class FakeServiceInfo:
@@ -53,6 +60,35 @@ class CompanionDiscoveryTests(unittest.TestCase):
         record.properties[b"protocol"] = b"1"
         record.addresses = []
         self.assertIsNone(_device_from_service_info(record, "EmberOS._emberos._tcp.local."))
+
+    def test_config_and_autostart_paths_follow_linux_desktop_conventions(self):
+        self.assertEqual(
+            _app_config_dir(
+                system="Linux",
+                environ={"XDG_CONFIG_HOME": "/tmp/user-config"},
+                home="/home/tester",
+            ),
+            Path("/tmp/user-config/emberos"),
+        )
+        self.assertEqual(
+            _app_config_dir(system="Windows", environ={}, home="C:/Users/tester"),
+            Path("C:/Users/tester/AppData/Local/EmberOS"),
+        )
+        self.assertEqual(
+            _linux_autostart_file(
+                environ={"XDG_CONFIG_HOME": "/tmp/user-config"}, home="/home/tester"
+            ),
+            Path("/tmp/user-config/autostart/emberos-connect.desktop"),
+        )
+
+    @patch("emberos_connect.shutil.which")
+    def test_linux_chooses_an_installed_app_browser(self, which):
+        which.side_effect = lambda name: "/usr/bin/chromium" if name == "chromium" else None
+        self.assertEqual(_app_browser(system="Linux"), "/usr/bin/chromium")
+        which.assert_called_once_with("chromium")
+
+    def test_desktop_exec_argument_escapes_desktop_entry_metacharacters(self):
+        self.assertEqual(_desktop_exec_arg('A "quoted" 100%'), '"A \\"quoted\\" 100%%"')
 
 
 if __name__ == "__main__":

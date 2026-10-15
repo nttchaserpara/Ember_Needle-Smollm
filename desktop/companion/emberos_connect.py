@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Windows desktop companion for EmberOS running on a headless Pi.
+"""Desktop companion for EmberOS running on a headless Pi.
 
 Keep this app open before starting ``emberos --lan`` on the Pi. It discovers
 the LAN service, opens an SSH tunnel, reads that session's token over SSH, and
@@ -11,9 +11,11 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 import hashlib
+import importlib
 import json
 import os
 from pathlib import Path
+import platform
 import select
 import secrets
 import shutil
@@ -35,8 +37,54 @@ from zeroconf import IPVersion, ServiceBrowser, ServiceListener, Zeroconf
 
 SERVICE_TYPE = "_emberos._tcp.local."
 KEYRING_SERVICE = "EmberOS Companion"
-APP_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "EmberOS"
+
+
+def _app_config_dir(system=None, environ=None, home=None) -> Path:
+    system = system or platform.system()
+    environ = os.environ if environ is None else environ
+    home = Path.home() if home is None else Path(home)
+    if system == "Windows":
+        return Path(environ.get("LOCALAPPDATA", home / "AppData" / "Local")) / "EmberOS"
+    xdg_config_home = environ.get("XDG_CONFIG_HOME")
+    return (Path(xdg_config_home) if xdg_config_home else home / ".config") / "emberos"
+
+
+APP_DIR = _app_config_dir()
 CONFIG_PATH = APP_DIR / "companion.json"
+
+
+def _app_browser(system=None, environ=None):
+    system = system or platform.system()
+    environ = os.environ if environ is None else environ
+    if system == "Windows":
+        for variable in ("PROGRAMFILES(X86)", "PROGRAMFILES", "LOCALAPPDATA"):
+            root = environ.get(variable)
+            if root:
+                candidate = Path(root) / "Microsoft" / "Edge" / "Application" / "msedge.exe"
+                if candidate.is_file():
+                    return str(candidate)
+        return shutil.which("msedge")
+    if system == "Linux":
+        for name in (
+            "chromium", "chromium-browser", "google-chrome-stable", "google-chrome",
+            "microsoft-edge-stable", "microsoft-edge", "brave-browser",
+        ):
+            browser = shutil.which(name)
+            if browser:
+                return browser
+    return None
+
+
+def _linux_autostart_file(environ=None, home=None) -> Path:
+    environ = os.environ if environ is None else environ
+    home = Path.home() if home is None else Path(home)
+    config_home = Path(environ.get("XDG_CONFIG_HOME", home / ".config"))
+    return config_home / "autostart" / "emberos-connect.desktop"
+
+
+def _desktop_exec_arg(value: str) -> str:
+    """Quote one argument using the Desktop Entry Exec field conventions."""
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%") + '"'
 
 
 @dataclass(frozen=True)
@@ -195,8 +243,8 @@ class _PinnedHostKey(paramiko.MissingHostKeyPolicy):
 
 class EmberOSCompanion:
     def __init__(self, background: bool = False):
-        if sys.platform != "win32":
-            raise RuntimeError("EmberOS Connect currently runs on Windows.")
+        if sys.platform != "win32" and not sys.platform.startswith("linux"):
+            raise RuntimeError("EmberOS Connect supports Windows and Linux desktops.")
 
         self.root = tk.Tk()
         self.root.title("EmberOS Connect")
@@ -246,9 +294,14 @@ class EmberOSCompanion:
         ttk.Button(buttons, text="Forget pairing", command=self.forget_selected).pack(side="left", padx=8)
 
         self.startup_var = tk.BooleanVar(value=self._startup_enabled())
+        startup_label = (
+            "Jalankan companion saat Windows masuk"
+            if sys.platform == "win32"
+            else "Jalankan companion saat login Linux"
+        )
         ttk.Checkbutton(
             frame,
-            text="Jalankan companion saat Windows masuk",
+            text=startup_label,
             variable=self.startup_var,
             command=self._toggle_startup,
         ).pack(anchor="w", pady=(4, 0))
@@ -377,7 +430,7 @@ class EmberOSCompanion:
                     lambda: simpledialog.askstring(
                         "Pair dengan Pi",
                         f"Kata sandi SSH untuk {username}@{device.name}:\n"
-                        "Disimpan di Windows Credential Manager agar pairing tidak perlu diulang. "
+                        "Disimpan di pengelola kredensial desktop agar pairing tidak perlu diulang. "
                         "Untuk SSH key, biarkan kosong.",
                         show="*",
                         parent=self.root,
@@ -445,7 +498,7 @@ class EmberOSCompanion:
                         0,
                         lambda error_text=error_text: messagebox.showwarning(
                             "Penyimpanan pairing",
-                            "Koneksi berhasil, tetapi Windows Credential Manager tidak bisa "
+                            "Koneksi berhasil, tetapi pengelola kredensial desktop tidak bisa "
                             f"menyimpan kata sandi: {error_text}",
                             parent=self.root,
                         ),
@@ -485,15 +538,19 @@ class EmberOSCompanion:
             self.connecting.discard(device.device_id)
 
     def _open_app_window(self, url: str):
-        candidates = []
-        for variable in ("PROGRAMFILES(X86)", "PROGRAMFILES", "LOCALAPPDATA"):
-            root = os.environ.get(variable)
-            if root:
-                candidates.append(Path(root) / "Microsoft" / "Edge" / "Application" / "msedge.exe")
-        edge = next((path for path in candidates if path.is_file()), None)
-        if edge:
-            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-            subprocess.Popen([str(edge), f"--app={url}", "--no-first-run"], creationflags=flags)
+        browser = _app_browser()
+        if browser:
+            options = {}
+            if platform.system() == "Windows":
+                options["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            else:
+                options["start_new_session"] = True
+                options["stdout"] = subprocess.DEVNULL
+                options["stderr"] = subprocess.DEVNULL
+            subprocess.Popen(
+                [browser, f"--app={url}", "--no-first-run", "--no-default-browser-check"],
+                **options,
+            )
         else:
             import webbrowser
 
@@ -540,6 +597,8 @@ class EmberOSCompanion:
         client.close()
 
     def _startup_enabled(self) -> bool:
+        if sys.platform.startswith("linux"):
+            return _linux_autostart_file().is_file()
         try:
             import winreg
 
@@ -550,6 +609,31 @@ class EmberOSCompanion:
             return False
 
     def _toggle_startup(self):
+        if sys.platform.startswith("linux"):
+            startup_file = _linux_autostart_file()
+            try:
+                if self.startup_var.get():
+                    executable = [sys.executable]
+                    if not getattr(sys, "frozen", False):
+                        executable.append(str(Path(__file__).resolve()))
+                    executable.append("--background")
+                    command = " ".join(_desktop_exec_arg(item) for item in executable)
+                    startup_file.parent.mkdir(parents=True, exist_ok=True)
+                    startup_file.write_text(
+                        "[Desktop Entry]\n"
+                        "Type=Application\n"
+                        "Name=EmberOS Connect\n"
+                        f"Exec={command}\n"
+                        "Terminal=false\n"
+                        "X-GNOME-Autostart-enabled=true\n",
+                        encoding="utf-8",
+                    )
+                else:
+                    startup_file.unlink(missing_ok=True)
+            except OSError as exc:
+                self.startup_var.set(not self.startup_var.get())
+                messagebox.showerror("Startup Linux", str(exc), parent=self.root)
+            return
         try:
             import winreg
 
@@ -593,21 +677,24 @@ class EmberOSCompanion:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--background", action="store_true", help="Start minimized for auto-discovery")
-    parser.add_argument("--self-test", action="store_true", help="Check bundled Windows runtime dependencies")
+    parser.add_argument("--self-test", action="store_true", help="Check companion runtime dependencies")
     options = parser.parse_args()
     try:
         if options.self_test:
-            if sys.platform != "win32":
-                return 1
-            if not isinstance(keyring.get_keyring(), WinVaultKeyring):
-                return 1
-            probe = f"self-test:{secrets.token_hex(12)}"
-            keyring.set_password(KEYRING_SERVICE, probe, "EmberOS Connect credential test")
-            try:
-                if keyring.get_password(KEYRING_SERVICE, probe) != "EmberOS Connect credential test":
-                    return 1
-            finally:
-                keyring.delete_password(KEYRING_SERVICE, probe)
+            if sys.platform != "win32" and not sys.platform.startswith("linux"):
+                raise RuntimeError("Only Windows and Linux desktop companions are supported.")
+            if sys.platform == "win32":
+                if not isinstance(keyring.get_keyring(), WinVaultKeyring):
+                    raise RuntimeError("Windows Credential Manager backend is unavailable.")
+                probe = f"self-test:{secrets.token_hex(12)}"
+                keyring.set_password(KEYRING_SERVICE, probe, "EmberOS Connect credential test")
+                try:
+                    if keyring.get_password(KEYRING_SERVICE, probe) != "EmberOS Connect credential test":
+                        raise RuntimeError("Windows credential round-trip failed.")
+                finally:
+                    keyring.delete_password(KEYRING_SERVICE, probe)
+            else:
+                importlib.import_module("keyring.backends.SecretService")
             # Exercise the imports that the frozen executable needs at runtime.
             paramiko.SSHClient()
             _ForwardServer
@@ -616,7 +703,13 @@ def main() -> int:
             return 0
         EmberOSCompanion(background=options.background).run()
     except Exception as exc:
-        if sys.platform == "win32":
+        if options.self_test or (
+            sys.platform.startswith("linux")
+            and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+        ):
+            operation = "self-test" if options.self_test else "startup"
+            print(f"EmberOS Connect {operation} failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+        elif sys.platform == "win32" or sys.platform.startswith("linux"):
             try:
                 root = tk.Tk()
                 root.withdraw()

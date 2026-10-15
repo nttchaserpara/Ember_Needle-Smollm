@@ -35,7 +35,6 @@ import sys
 import threading
 import time
 import urllib.parse
-import webbrowser
 
 sys.path.insert(0, ".")
 
@@ -46,6 +45,7 @@ from emberos.responses import format_tool_response
 from emberos.config import ROOT_DIR, data_dir, log_dir
 from emberos.memory import ConversationMemory
 from emberos.replies import ReplyRenderer, original_response
+from emberos.gui_launcher import open_gui_window as _open_gui_window
 from run_ember import handle_request, _format_bytes, _memory_snapshot
 
 _PROCESS = psutil.Process(os.getpid())
@@ -1711,10 +1711,7 @@ def run_server(host: str = "127.0.0.1", port: int = 8080):
         os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
     )
     if host in ("127.0.0.1", "0.0.0.0") and has_desktop:
-        try:
-            threading.Timer(0.8, lambda: webbrowser.open(access_url)).start()
-        except Exception:
-            pass
+        threading.Timer(0.8, lambda: _open_gui_window(access_url)).start()
 
     try:
         server.serve_forever()

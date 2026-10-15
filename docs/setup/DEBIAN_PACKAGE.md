@@ -18,27 +18,38 @@ sudo apt-get update
 sudo apt-get install emberos
 ```
 
-Start the chat GUI with `emberos`; it opens a local browser on desktop Linux.
-For a headless Pi, use the Windows companion so the GUI opens on your laptop
-without manually entering the Pi address or access token. Download the
-`emberos-companion-windows` artifact from a successful GitHub Actions run, unzip
-it, and launch `EmberOS-Connect.exe`. On the Pi, run `emberos` as your normal
-login user and leave it running. The web server stays on the Pi's loopback
-interface; the companion discovers it on the same local network and reaches it
-through SSH. On first use, it asks for the Linux username/password and SSH host
-fingerprint. Compare the displayed fingerprint with this command on the Pi
-before accepting:
+Start the chat GUI with `emberos`; on a Linux desktop it opens a standalone
+Chromium/Chrome/Edge/Brave app window when one is installed, and otherwise uses
+the default browser. The launcher detects available browsers, so the same
+package works across the supported Debian and Ubuntu desktop systems. A
+headless Pi has no local display to show a popup; use the companion on a desktop
+computer on the same network. Download the `emberos-companion-linux-amd64` or
+`emberos-companion-windows` artifact from a successful GitHub Actions run, then
+launch it. On Linux, run it from an active graphical session. For saved SSH
+passwords, enable a Secret Service-compatible desktop keyring; without one, the
+companion still connects but may ask for the password again later. On Windows,
+unzip and launch `EmberOS-Connect.exe`. The prebuilt Linux companion is amd64;
+on an arm64 Linux desktop, install `python3-tk` and `python3-venv`, create a
+virtual environment, install `desktop/companion/requirements.txt`, then run
+`desktop/companion/emberos_connect.py` with that environment's Python.
+On the Pi, run `emberos` as your normal login user and leave it running. The
+web server stays on the Pi's loopback interface; the companion discovers it on
+the same local network and reaches it through SSH. On first use, it asks for
+the Linux username/password and SSH host fingerprint. Compare the displayed
+fingerprint with this command on the Pi before accepting:
 
 ```sh
 for key in /etc/ssh/ssh_host_*_key.pub; do sudo ssh-keygen -lf "$key"; done
 ```
 
-The password is saved in Windows Credential Manager; the short-lived web token
-is read over SSH and is never announced on the network. Later, the companion
-opens the app window automatically when it finds the paired Pi. The optional
-startup checkbox keeps discovery running after you sign in to Windows. Allow
-the companion on Private networks if Windows Firewall asks. Discovery needs
-the laptop and Pi on the same network, with mDNS and SSH (port 22) available.
+The password is saved in the operating system's credential manager; on Linux,
+this requires a Secret Service-compatible desktop keyring. The short-lived web
+token is read over SSH and is never announced on the network. Later, the
+companion opens the app window automatically when it finds the paired Pi. Its
+optional startup checkbox can keep discovery running after desktop login.
+Allow the companion on Private networks if Windows Firewall asks. Discovery
+needs the computer and Pi on the same network, with mDNS and SSH (port 22)
+available.
 
 If you prefer direct browser access from another device, run `emberos --lan`;
 it binds the web server to the LAN and prints the manual URL and token. Find
