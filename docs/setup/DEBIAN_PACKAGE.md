@@ -151,13 +151,12 @@ that tag:
    - `APT_SIGNING_KEY`: the complete armored private key, including the
      `BEGIN` and `END PGP PRIVATE KEY BLOCK` lines from the exported file.
    - `APT_SIGNING_PASSPHRASE`: the passphrase used for that key.
-4. From an up-to-date checkout of the default branch, create and push the
-   release tag:
+4. From PowerShell in the repository folder, after the pull request is merged,
+   create and push a tag pointing at the latest `main` commit:
 
-   ```sh
-   git switch main
-   git pull --ff-only
-   git tag -a v0.0.1 -m "EmberOS 0.0.1"
+   ```powershell
+   git fetch origin
+   git tag -a v0.0.1 origin/main -m "EmberOS 0.0.1"
    git push origin v0.0.1
    ```
 
@@ -166,7 +165,8 @@ packages, builds both desktop companion apps, creates GitHub release downloads,
 signs the APT index, and deploys the repository to Pages. Wait for the
 `publish` job to finish successfully before sharing the installation command.
 Do not create the tag on the feature branch: the workflow would publish the
-commit that the tag points to, whether or not it has been merged.
+commit that the tag points to, whether or not it has been merged. These
+commands do not switch branches or change working files.
 
 The APT setup script selects the package suite from `/etc/os-release` and the
 CPU architecture from `dpkg`. It rejects other suites and architectures with a
