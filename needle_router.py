@@ -584,6 +584,56 @@ def _user_folder_path(folder_name: str) -> str:
     return str(Path.home() / folder_name)
 
 
+def _known_directory_listing_call(query: str) -> dict | None:
+    """Resolve clear, single-folder listing requests without model arguments.
+
+    Listing names is read-only. Restrict this shortcut to affirmative,
+    single-action phrasings and known user folders so questions about how to
+    list files, negated commands, and compound requests still use the router.
+    """
+    text = " ".join(str(query or "").replace("’", "'").split())
+    target = (
+        r"(?P<target>(?:(?:my|the)\s+)?"
+        r"(?:home(?:\s+(?:directory|folder))?|"
+        r"downloads?(?:\s+(?:folder|directory))?|"
+        r"documents?(?:\s+(?:folder|directory))?|"
+        r"desktop(?:\s+(?:folder|directory))?))"
+    )
+    endings = r"[?.!]*"
+    patterns = (
+        rf"(?:please\s+)?(?:(?:can|could|would)\s+you\s+)?"
+        rf"(?:list|show|display)(?:\s+me)?\s+"
+        rf"(?:(?:all\s+)?(?:the\s+)?"
+        rf"(?:files?(?:\s+and\s+folders?)?|folders?|contents?|items?)\s+)?"
+        rf"(?:in|inside|within|of)\s+{target}{endings}",
+        rf"what(?:'s|\s+is|\s+are)\s+(?:in|inside|within)\s+{target}{endings}",
+        rf"(?:please\s+)?(?:(?:can|could|would)\s+you\s+)?"
+        rf"(?:show|display)(?:\s+me)?\s+what(?:'s|\s+is|\s+are)\s+"
+        rf"(?:in|inside|within)\s+{target}{endings}",
+    )
+    match = None
+    for pattern in patterns:
+        match = re.fullmatch(pattern, text, re.IGNORECASE)
+        if match:
+            break
+    if not match:
+        return None
+
+    words = set(match.group("target").casefold().split())
+    if "home" in words:
+        path = str(Path.home())
+    else:
+        folder_name = next(
+            (name for name in ("Downloads", "Documents", "Desktop")
+             if name.casefold() in words),
+            None,
+        )
+        if folder_name is None:
+            return None
+        path = _user_folder_path(folder_name)
+    return {"name": "list_dir", "arguments": {"path": path}}
+
+
 def _document_intent_call(query: str) -> dict | None:
     """Preserve explicit quoted content and JSON rows that Needle can misparse.
 
@@ -689,6 +739,9 @@ def _known_intent_call(query: str) -> dict | None:
     document_call = _document_intent_call(query)
     if document_call:
         return document_call
+    directory_listing_call = _known_directory_listing_call(query)
+    if directory_listing_call:
+        return directory_listing_call
     file_reference_call = _known_file_reference_call(query)
     if file_reference_call:
         return file_reference_call
@@ -738,21 +791,6 @@ def _known_intent_call(query: str) -> dict | None:
         normalized,
     ):
         return {"name": "battery_status", "arguments": {}}
-
-    list_request = re.search(r"\b(list|show|display|what(?:'s| is| are)?|see)\b", normalized)
-    files_request = re.search(r"\b(files?|folders?|contents?|downloads?)\b", normalized)
-    if list_request and files_request:
-        folders = {
-            "downloads": "Downloads",
-            "documents": "Documents",
-            "desktop": "Desktop",
-        }
-        for keyword, folder_name in folders.items():
-            if re.search(rf"\b{keyword}\b", normalized):
-                return {
-                    "name": "list_dir",
-                    "arguments": {"path": _user_folder_path(folder_name)},
-                }
 
     if re.search(r"\b(show|list)\b.*\b(tasks?|to-?dos?)\b", normalized):
         return {"name": "list_tasks", "arguments": {"show_all": False}}
@@ -1022,6 +1060,19 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
     Every existing caller (benchmarks, evaluators) doesn't pass this, so
     nothing about them changes.
     """
+    directory_listing_call = _known_directory_listing_call(query)
+    if directory_listing_call:
+        try:
+            tool_registry.validate_arguments(
+                directory_listing_call["name"], directory_listing_call["arguments"]
+            )
+        except (TypeError, ValueError):
+            pass
+        else:
+            if diagnostics is not None:
+                diagnostics["deterministic_read_only_route"] = "list_dir"
+            return _execute_call(directory_listing_call, tool_registry)
+
     history_help = ("I couldn't reliably interpret this conversation-history request. "
                     "Use /memory to view recent conversations, or /memory search <topic> "
                     "to search saved messages.")

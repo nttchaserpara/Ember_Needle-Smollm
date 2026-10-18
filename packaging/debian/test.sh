@@ -114,6 +114,13 @@ test ! -e /opt/emberos/data
 runuser -u emberos-smoke -- env HOME=/home/emberos-smoke \
     /opt/emberos/venv/bin/python /opt/emberos/scripts/smoke_all_tools.py --skip-model
 
+# Ensure common home/Downloads prompts survive model argument failures and
+# resolve only to the current user's read-only directory listing.
+runuser -u emberos-smoke -- env HOME=/home/emberos-smoke \
+    EMBER_DATA_DIR=/home/emberos-smoke/.local/share/emberos \
+    PYTHONPATH=/opt/emberos \
+    /opt/emberos/venv/bin/python /opt/emberos/scripts/test_directory_listing.py
+
 # Verify a just-read file remains the only target for a contextual delete, and
 # that the confirmation gate never deletes it without an explicit yes.
 runuser -u emberos-smoke -- env HOME=/home/emberos-smoke \

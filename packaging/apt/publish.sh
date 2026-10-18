@@ -4,7 +4,7 @@ set -euo pipefail
 DEB_DIR=${1:?Pass the directory containing built .deb files}
 SITE_DIR=${2:?Pass the output directory for the Pages site}
 SOURCE_DIR=${3:?Pass the repository checkout}
-DEB_VERSION=${4:-0.0.1-4}
+DEB_VERSION=${4:-0.0.1-5}
 SIGNING_KEY=${APT_SIGNING_KEY:?Set APT_SIGNING_KEY to the armored private key}
 SIGNING_PASSPHRASE=${APT_SIGNING_PASSPHRASE:?Set APT_SIGNING_PASSPHRASE}
 
