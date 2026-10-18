@@ -367,5 +367,49 @@
     "rejected_candidates": [
       "Undo was not applied: The audio device is broken."
     ]
+  },
+  {
+    "id": "backend_context",
+    "query": "Where is this running?",
+    "generate": true,
+    "result": {
+      "route": "tool_call",
+      "tool": "get_agent_context",
+      "success": true,
+      "status": "success",
+      "data": {
+        "host_name": "kiomiii",
+        "operating_system": "Windows",
+        "machine_architecture": "AMD64",
+        "device_model": "not detected",
+        "session_mode": "desktop",
+        "runtime_surface": "EmberOS web application"
+      }
+    }
+  },
+  {
+    "id": "backend_capabilities",
+    "query": "What are your capabilities?",
+    "generate": true,
+    "result": {
+      "route": "tool_call",
+      "tool": "get_agent_capabilities",
+      "success": true,
+      "status": "success",
+      "data": {
+        "capability_areas": [
+          "file management",
+          "document reading and summaries",
+          "notes and tasks",
+          "system and device status",
+          "desktop and application controls",
+          "image and media tools",
+          "conversation history"
+        ],
+        "operating_system": "Windows",
+        "runtime_surface": "EmberOS web application",
+        "capability_note": "Tools run on this backend host. Individual tools can be unavailable because of the current platform, hardware, or installed dependencies."
+      }
+    }
   }
 ]

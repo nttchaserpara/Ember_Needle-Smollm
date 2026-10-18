@@ -131,8 +131,10 @@ Pi model and lab devices.
 
 ## Maintainer release
 
-The publishing workflow runs only for the exact tag `v0.0.1`. Before creating
-that tag:
+The publishing workflow runs only for the exact tag `v0.0.1-4`. This is Debian
+revision 4 of EmberOS product version 0.0.1, so APT upgrades the previously
+published `0.0.1-3` package without changing the product version. Before
+creating the tag:
 
 1. Merge the packaging changes into the repository's default branch.
 2. In **Settings → Pages**, set the publishing source to **GitHub Actions**.
@@ -156,8 +158,8 @@ that tag:
 
    ```powershell
    git fetch origin
-   git tag -a v0.0.1 origin/main -m "EmberOS 0.0.1"
-   git push origin v0.0.1
+   git tag -a v0.0.1-4 origin/main -m "EmberOS 0.0.1-4"
+   git push origin v0.0.1-4
    ```
 
 The tag starts the workflow. It builds and smoke-tests all four Debian

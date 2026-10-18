@@ -43,7 +43,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/emberos-debs"
           docker run --rm \
             --platform "linux/${ARCH}" \
-            -e SUITE -e ARCH -e UPSTREAM_VERSION=0.0.1 \
+            -e SUITE -e ARCH -e UPSTREAM_VERSION=0.0.1 -e DEB_VERSION=0.0.1-4 \
             -v "$GITHUB_WORKSPACE:/src:ro" \
             -v "$RUNNER_TEMP/emberos-debs:/out" \
             "$IMAGE" bash /src/packaging/debian/build.sh
@@ -56,7 +56,7 @@ jobs:
             -v "$GITHUB_WORKSPACE:/src:ro" \
             -v "$RUNNER_TEMP/emberos-debs:/out:ro" \
             "$IMAGE" bash /src/packaging/debian/test.sh \
-              "/out/emberos_0.0.1-3_${{ matrix.suite }}_${{ matrix.arch }}.deb" \
+              "/out/emberos_0.0.1-4_${{ matrix.suite }}_${{ matrix.arch }}.deb" \
               "${{ matrix.suite }}" "${{ matrix.arch }}"
       - uses: actions/upload-artifact@v4
         with:
@@ -122,7 +122,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: github.ref == 'refs/tags/v0.0.1'
+    if: github.ref == 'refs/tags/v0.0.1-4'
     needs: [package, windows-companion, linux-companion]
     runs-on: ubuntu-24.04
     permissions:
@@ -142,13 +142,13 @@ jobs:
           APT_SIGNING_PASSPHRASE: ${{ secrets.APT_SIGNING_PASSPHRASE }}
         run: |
           if [[ -z "$APT_SIGNING_KEY" || -z "$APT_SIGNING_PASSPHRASE" ]]; then
-            echo "Set APT_SIGNING_KEY and APT_SIGNING_PASSPHRASE before publishing v0.0.1." >&2
+            echo "Set APT_SIGNING_KEY and APT_SIGNING_PASSPHRASE before publishing v0.0.1-4." >&2
             exit 1
           fi
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends apt-utils dpkg-dev gnupg
           bash packaging/apt/publish.sh \
-            "$RUNNER_TEMP/emberos-debs" "$RUNNER_TEMP/emberos-pages" "$GITHUB_WORKSPACE"
+            "$RUNNER_TEMP/emberos-debs" "$RUNNER_TEMP/emberos-pages" "$GITHUB_WORKSPACE" 0.0.1-4
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -637,6 +637,49 @@ def _document_intent_call(query: str) -> dict | None:
     return None
 
 
+def _known_file_reference_call(query: str) -> dict | None:
+    """Extract a file target from a clear, single-action request.
+
+    This is a narrow recovery path for requests such as ``read file robot
+    report`` where Needle often recognizes the tool but marks the partial
+    filename as ungrounded. The ordinary router still chooses and validates
+    the action; this helper only preserves the user's explicit verb and
+    target text for the bounded file-reference resolver.
+    """
+    match = re.fullmatch(
+        r"\s*(?:please\s+)?(?:(?:can|could|would)\s+you\s+)?"
+        r"(?P<verb>read|summari[sz]e|delete|remove)\s+"
+        r"(?:(?:the|a|an|my)\s+)?(?:(?:file|document)\s+)?"
+        r"(?P<reference>.+?)"
+        r"(?:\s+(?:to|for)\s+me)?\s*[.!?]?\s*",
+        query,
+        re.IGNORECASE,
+    )
+    if not match:
+        return None
+    reference = match.group("reference").strip().strip("\\\"'")
+    reference = re.sub(r"\s+please$", "", reference, flags=re.IGNORECASE).strip()
+    # Pronouns refer to conversational context, not a filename. run_ember
+    # resolves them only against the file just read in this session; allowing
+    # them through here would trigger a broad home-folder search for "it".
+    if reference.casefold() in {
+        "it", "this", "that", "file", "this file", "that file",
+        "same file", "last one", "previous one",
+    }:
+        return None
+    # Exact and directory-qualified paths retain the existing model-validation
+    # flow. This recovery is only for human-readable partial filenames.
+    if re.match(r"^[A-Za-z]:[\\/]|[/\\]", reference) or "/" in reference or "\\" in reference:
+        return None
+    if not re.search(r"[a-z0-9]{2,}", reference, re.IGNORECASE):
+        return None
+    action = match.group("verb").casefold()
+    tool = "read_file" if action == "read" else (
+        "summarize_file" if action.startswith("summari") else "delete_file"
+    )
+    return {"name": tool, "arguments": {"path": reference}}
+
+
 def _known_intent_call(query: str) -> dict | None:
     """Handle explicit document commands and narrow OS phrases Needle confuses.
 
@@ -646,6 +689,9 @@ def _known_intent_call(query: str) -> dict | None:
     document_call = _document_intent_call(query)
     if document_call:
         return document_call
+    file_reference_call = _known_file_reference_call(query)
+    if file_reference_call:
+        return file_reference_call
 
     normalized = " ".join(query.lower().split())
 
@@ -712,22 +758,33 @@ def _known_intent_call(query: str) -> dict | None:
         return {"name": "list_tasks", "arguments": {"show_all": False}}
 
     add_task_match = re.search(
-        r"\b(?:add|create|new|make)\b.*?\btask\b[:\s]+(.+)"
-        r"|\btask[:\s]+(.+)"
+        r"\b(?:add|create|new|make)\b.*?\btask\b(?:\s+(?:titled|called)\s+|[:\s]+)(.+)"
+        r"|\btask\s+(?:(?:titled|called)\s+|[:\s]+)(.+)"
         r"|\bremind\s+me\s+to\s+(.+)"
         r"|\bremember\s+to\s+(.+)",
-        normalized,
+        query.strip(),
+        re.IGNORECASE,
     )
     if add_task_match:
         title = next(g for g in add_task_match.groups() if g is not None).strip()
-        # Parse priority kalau ada "with priority X" atau "priority X"
         priority = "normal"
-        priority_match = re.search(r"\bwith\s+priority\s+(high|normal|low)\b"
-                                   r"|\bpriority[:\s]+(high|normal|low)\b", title)
+        priority_match = re.search(
+            r"\bwith\s+priority\s+(high|normal|low)\b"
+            r"|\bpriority[:\s]+(high|normal|low)\b",
+            title,
+            re.IGNORECASE,
+        )
         if priority_match:
-            priority = next(g for g in priority_match.groups() if g is not None)
-            # Hapus bagian priority dari title
-            title = re.sub(r"\s*(?:with\s+)?priority[:\s]+(?:high|normal|low)\b", "", title).strip()
+            priority = next(g for g in priority_match.groups() if g is not None).lower()
+            title = re.sub(
+                r"\s*(?:with\s+)?priority[:\s]+(?:high|normal|low)\b",
+                "",
+                title,
+                flags=re.IGNORECASE,
+            ).strip()
+        if len(title) >= 2 and title[0] == title[-1] and title[0] in {"'", '"'}:
+            title = title[1:-1]
+        title = title.strip().rstrip(".!?").strip()
         if title:
             return {"name": "add_task", "arguments": {"title": title, "due_date": "", "priority": priority}}
 
@@ -819,6 +876,26 @@ def _execute_call(call: dict, tool_registry, confidence: float | None = None) ->
     return result
 
 
+
+
+def _try_runtime_fact_route(query: str, tool_registry, *, diagnostics=None):
+    """Use a narrowly scoped selector only for ambiguous backend-fact queries."""
+    from emberos.runtime_routing import select_runtime_fact
+
+    selection = select_runtime_fact(query)
+    if diagnostics is not None:
+        diagnostics["runtime_fact_selection"] = selection.get("attempts", {})
+    tool_name = selection.get("tool")
+    if not tool_name:
+        return None
+    call = {"name": tool_name, "arguments": {}}
+    try:
+        tool_registry.validate_arguments(tool_name, call["arguments"])
+    except (TypeError, ValueError, KeyError):
+        return None
+    if diagnostics is not None:
+        diagnostics["runtime_fact_selected"] = tool_name
+    return _execute_call(call, tool_registry, confidence=selection.get("confidence"))
 
 
 def _route_multi_step(calls: list[dict], tool_registry, *, confidence: float | None) -> dict:
@@ -951,6 +1028,8 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
     if getattr(tool_registry, "memory", None) is None:
         history_help = ("Conversation history is disabled or unavailable. "
                         "No live system action was taken for this history request.")
+    known_file_reference_call = _known_file_reference_call(query)
+    known_call = known_file_reference_call or _known_intent_call(query)
     history_requested = False
     # Intent separation must not disappear when history storage is disabled.
     from emberos.history_routing import select_history
@@ -968,17 +1047,27 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
         if validation.get("negation"):
             return {"route": "no_action", "needle_confidence": selected.get("confidence"),
                     "response": "No action taken.", "reason": "negated_request", "truncated": False}
+        runtime_response = _try_runtime_fact_route(
+            query, tool_registry, diagnostics=diagnostics
+        )
+        if runtime_response is not None:
+            return runtime_response
         confidence = selected.get("confidence")
         if (selected.get("success") is not True or selected.get("error")
                 or validation.get("ungrounded") or len(proposals) != 1
                 or proposals[0].get("arguments") != {}
                 or confidence is None or confidence < CONFIDENCE_THRESHOLD):
+            if not validation.get("ungrounded"):
+                runtime_response = _try_runtime_fact_route(
+                    query, tool_registry, diagnostics=diagnostics
+                )
+                if runtime_response is not None:
+                    return runtime_response
             return {"route": "unresolved_tool_request", "needle_confidence": confidence,
                     "response": history_help,
                     "reason": "uncertain_history_request", "truncated": False}
         history_requested = True
 
-    known_call = _known_intent_call(query)
     model_query = query
     path_alias = None
     if known_call and known_call["name"] == "summarize_file":
@@ -1007,6 +1096,28 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
                 "response": "No action taken.", "reason": "negated_request", "truncated": False}
     if validation.get("ungrounded"):
         model_calls = result.get("function_calls") or []
+        file_tools = {"read_file", "summarize_file", "delete_file"}
+        ungrounded_fields = validation.get("ungrounded") or []
+        only_file_path_ungrounded = bool(ungrounded_fields) and all(
+            str(field).casefold().rsplit(".", 1)[-1] in {"path", "file_path"}
+            for field in ungrounded_fields
+        )
+        if (known_file_reference_call and known_file_reference_call["name"] in file_tools
+                and only_file_path_ungrounded
+                and (not model_calls or (
+                    len(model_calls) == 1
+                    and model_calls[0].get("name") == known_file_reference_call["name"]
+                ))):
+            try:
+                tool_registry.validate_arguments(
+                    known_file_reference_call["name"], known_file_reference_call["arguments"]
+                )
+                return _execute_call(
+                    known_file_reference_call, tool_registry,
+                    confidence=result.get("confidence"),
+                )
+            except (TypeError, ValueError):
+                pass
         default_file_discovery = {
             "find_large_files",
             "find_old_files",
@@ -1030,6 +1141,29 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
     calls = result.get("function_calls") or []
     calls = _fix_set_volume_misroute(calls, query)
     calls = _fix_ram_status_misroute(calls, query)
+    if not history_requested and (
+            not calls
+            or calls[0].get("name") in {
+                "get_system_info", "cpu_info", "get_active_window", "get_volume",
+                "running_processes", "cpu_temperature",
+            }):
+        runtime_response = _try_runtime_fact_route(
+            query, tool_registry, diagnostics=diagnostics
+        )
+        if runtime_response is not None:
+            return runtime_response
+    if (not history_requested and len(calls) == 1
+            and calls[0].get("name") == "cpu_temperature"):
+        from emberos.runtime_routing import confirm_cpu_temperature_request
+
+        confirmation = confirm_cpu_temperature_request(query)
+        if diagnostics is not None:
+            diagnostics["cpu_temperature_intent_check"] = confirmation["result"]
+        if not confirmation["selected"]:
+            return unresolved(
+                "I couldn't confirm that you are asking about CPU temperature. Please name the temperature or overheating check.",
+                "uncertain_cpu_temperature_request",
+            )
     if history_requested and (len(calls) != 1 or calls[0].get("name") != "search_conversation_history"):
         return unresolved(history_help, "conflicting_history_route")
     if len(calls) > 1 and not multi_step_mode:
@@ -1041,13 +1175,6 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
     )
 
     if has_match and not confident:
-        # Kalau known_call ada dan Needle pilih tool yang sama, trust known_call
-        if known_call and calls[0].get("name") == known_call.get("name"):
-            try:
-                tool_registry.validate_arguments(known_call["name"], known_call["arguments"])
-                return _execute_call(known_call, tool_registry, confidence=result["confidence"])
-            except (TypeError, ValueError):
-                pass
         if (known_call and known_call["name"] == "summarize_file"
                 and Path(known_call["arguments"]["path"]).suffix.lower() == ".doc"
                 and path_alias and calls[0].get("name") == "summarize_file"
@@ -1055,6 +1182,13 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
             from use_cases.file_analysis import legacy_word_unavailable
             return unresolved(str(legacy_word_unavailable(known_call["arguments"]["path"])),
                               "unsupported_document_format")
+        # Kalau known_call ada dan Needle pilih tool yang sama, trust known_call.
+        if known_call and calls[0].get("name") == known_call.get("name"):
+            try:
+                tool_registry.validate_arguments(known_call["name"], known_call["arguments"])
+                return _execute_call(known_call, tool_registry, confidence=result["confidence"])
+            except (TypeError, ValueError):
+                pass
         return {
             "route": "unresolved_tool_request",
             "needle_confidence": result["confidence"],
@@ -1069,6 +1203,17 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
 
     if not has_match:
         if known_call:
+            if known_file_reference_call:
+                try:
+                    tool_registry.validate_arguments(
+                        known_file_reference_call["name"], known_file_reference_call["arguments"]
+                    )
+                    return _execute_call(
+                        known_file_reference_call, tool_registry,
+                        confidence=result.get("confidence"),
+                    )
+                except (TypeError, ValueError):
+                    pass
             reasoning = (result.get("reasoning") or "").lower()
             model_err = (result.get("error") or "").lower()
             # Rescue kalau Needle gagal karena alasan teknis (parameter parsing error,

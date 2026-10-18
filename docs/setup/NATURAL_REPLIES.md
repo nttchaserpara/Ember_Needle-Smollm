@@ -1,6 +1,6 @@
 # Natural replies
 
-Updated 15 September 2026. Short outcomes automatically use the existing
+Updated 17 October 2026. Short outcomes automatically use the existing
 SmolLM2-135M-Instruct Q4_K_M through llama.cpp. Needle selects the tool, the
 executor returns its outcome, then SmolLM writes the response. If generation
 fails or output checks reject it, the original response is used automatically.
@@ -31,7 +31,7 @@ The model receives the current request and reported outcome. For eligible
 tool outcomes it also receives up to two complete saved turns for **the same
 tool**, oldest first. A parameterized SQLite lookup selects recent records
 across saved sessions after execution. It neither classifies intent nor fills
-tool arguments. No embedding model or extra model worker is added.
+tool arguments. No embedding model or additional heavyweight model is added.
 
 History supplies conversational context, not current device state. Only the
 current tool result supplies current facts. Each saved context turn is limited
@@ -46,6 +46,17 @@ reply layer. It may still use identical wording when the source already reads
 naturally. Different wording is not required for acceptance. Temperature stays
 at zero to avoid adding randomness purely for variety.
 
+Questions about the computer hosting EmberOS and the features registered by
+that installation use separate, narrow Needle selectors. They query the live
+backend for host name, operating system, device model, session type and
+registered capability areas. The small SmolLM then composes a short answer
+from those facts. Host and operating system are checked before display. The
+remote laptop and its operating system are not inferred from the backend; the
+current web surface is reported separately when known. These selector schemas
+stay outside the main action catalogue, and only high-confidence, read-only
+selections are accepted. This improves those specific questions; it does not
+make Needle's general routing or EmberOS a general-purpose chatbot.
+
 - Complete, short, plain outcomes are eligible for generation. Raw file and
   clipboard contents, notes/history search results, structured output, tables,
   long messages and successful document summaries are displayed intact.
@@ -57,7 +68,8 @@ at zero to avoid adding randomness purely for variety.
   cancellation or rejected text uses the original response. No retry is made.
 - Output checks cover number occurrences, units, references, quoted facts,
   selected structured facts, failure/refusal markers and some action claims.
-  Generated status labels are rejected; code supplies the actual outcome label.
+  Generated status labels are rejected. The UI displays natural text without
+  `[OK]`/`[RESULT]` prefixes; explicit tool status remains in response metadata.
   These checks do **not** prove semantic equivalence.
 - Error, partial, and refusal outcomes must retain the complete original
   wording (case, spacing and punctuation may differ). A negative word alone
@@ -119,6 +131,14 @@ coverage and execution/storage correctness are reported separately; a working
 fallback is not counted as successful model generation. Inspect candidate
 meaning as well as the automatic checks. Test reports are local under `logs/`.
 
+The Windows run on 17 October generated 9 of 19 eligible answers; 10 eligible
+answers used the verified original response, and 3 payload cases bypassed
+generation. The two new backend-context and capability answers were accepted.
+Generation attempts took 0.78–1.21 seconds; peak EmberOS plus worker memory was
+255.76 MiB. The overall accepted-generation rate was essentially unchanged from the
+baseline (8/17 eligible answers). This measures Windows only and does not
+establish latency or memory use on a Raspberry Pi Zero 2 W.
+
 The Windows evaluation on 14 September used generated text for 9 of 14 eligible
 outcomes and fell back on 5; 3 payload cases bypassed generation. All execution,
 history-selection and storage checks passed. A past success could still make
@@ -128,7 +148,8 @@ Generation took 1.28-2.27 seconds with peak agent/worker RSS of 250.46 MiB and
 no remaining workers (`logs/replies-context-2026-09-14.json`, local report).
 Physical Pi validation was still pending at that point.
 
-The supplied Pi run on 15 September completed the application reply pipeline,
+The supplied Pi run on 15 September, before the October context/capability
+changes, completed the application reply pipeline,
 with 10 generated replies and 7 fallbacks among 17 eligible cases. However,
 accepted deletion/brightness errors added an unsupported location or replaced
 the cause. Those were false acceptances, not successful factual paraphrases.

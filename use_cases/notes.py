@@ -53,6 +53,10 @@ class NotesManager:
                     "timestamp": ts, "tags": tags or []}
 
     def search(self, query: str, limit: int = 10) -> list[dict]:
+        # A note has a searchable database row and an exported TXT file. The
+        # file can be removed outside Ember, so remove stale rows before every
+        # search instead of returning notes that no longer exist on disk.
+        self.prune_missing_exports()
         with self._lock:
             rows = self._conn.execute(
                 "SELECT id, title, content, timestamp, tags FROM notes "
@@ -61,6 +65,47 @@ class NotesManager:
                 (f"%{query}%", f"%{query}%", f"%{query}%", limit),
             ).fetchall()
         return [self._row_to_dict(r) for r in rows]
+
+    def prune_missing_exports(self) -> list[dict]:
+        """Delete database notes whose exported TXT no longer exists."""
+        # If the directory itself is unavailable, preserve the database copy;
+        # this may be a temporary filesystem/permission problem rather than a
+        # confirmed deletion.
+        if not self._notes_dir.is_dir():
+            return []
+        try:
+            with self._lock:
+                rows = self._conn.execute(
+                    "SELECT id, title, content, timestamp, tags FROM notes"
+                ).fetchall()
+            notes = [self._row_to_dict(row) for row in rows]
+            stale = [note for note in notes if not self._has_export(note)]
+        except OSError:
+            return []
+        if not stale:
+            return []
+
+        with self._lock:
+            self._conn.executemany(
+                "DELETE FROM notes WHERE id = ?",
+                [(note["id"],) for note in stale],
+            )
+            self._conn.commit()
+        return stale
+
+    def _has_export(self, note: dict) -> bool:
+        """Match the base export and any collision-suffixed export."""
+        pattern = re.compile(
+            rf"^{re.escape(self._export_stem(note))}(?:-\d+)?\.txt$",
+            re.IGNORECASE,
+        )
+        try:
+            return any(
+                entry.is_file() and pattern.fullmatch(entry.name)
+                for entry in self._notes_dir.iterdir()
+            )
+        except OSError:
+            return True
 
     def export_text(self, note: dict) -> Path:
         """Export a saved note without overwriting existing files or edits."""

@@ -10,6 +10,8 @@ from emberos.outcomes import ToolOutput
 # barriers by default so undo cannot silently reach past an untracked action.
 READ_ONLY_TOOLS = frozenset({
     "read_file", "list_dir", "get_clipboard", "get_active_window", "get_system_info",
+    "get_agent_context",
+    "get_agent_capabilities",
     "find_files", "get_file_info", "disk_usage", "ram_status", "running_processes",
     "system_uptime", "cpu_info", "cpu_temperature", "summarize_file", "analyze_files",
     "grep_file", "grep_folder", "diff_files", "extract_patterns", "list_archive_contents",

@@ -61,6 +61,7 @@ WEB_SAFE_TOOLS = {
     "find_files", "find_large_files", "find_old_files", "find_duplicate_files",
     "get_image_info", "list_archive_contents", "search_notes",
     "search_conversation_history", "folder_explain", "get_system_info",
+    "get_agent_context", "get_agent_capabilities",
     # Safe file and document operations
     "read_file", "list_dir", "copy_file", "create_directory",
     "list_archive_contents", "extract_archive", "compress_to_zip",
@@ -135,7 +136,7 @@ class RateLimiter:
 
 # ---------------------------------------------------------------------------
 # Security: web-safe ToolRegistry
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------zceede45eeereqn lllokklkkioke
 class WebSafeToolRegistry(ToolRegistry):
     """Enforce the Web policy before any registered function is called."""
 
@@ -230,6 +231,7 @@ class EmberWebContext:
             except (OSError, sqlite3.Error, ValueError) as exc:
                 print(f"[memory] Conversation memory is unavailable: {exc}")
         self.registry = WebSafeToolRegistry(memory=self.memory)
+        self.registry.runtime_surface = "EmberOS web application"
         self.reply_renderer = ReplyRenderer()
         self.multistep_enabled = True  # Natural multi-step enabled by default
 
@@ -1100,6 +1102,13 @@ HTML_PAGE = r"""<!DOCTYPE html>
     let welcomeHideTimer = null;
     let footerFocusTimer = null;
     let chatSessionId = 0;
+    let conversationId = sessionStorage.getItem('ember_conversation_id');
+    if (!conversationId) {
+      conversationId = (window.crypto && crypto.randomUUID)
+        ? crypto.randomUUID().replace(/-/g, '')
+        : 'tab_' + Math.random().toString(36).slice(2);
+      sessionStorage.setItem('ember_conversation_id', conversationId);
+    }
 
     function updateCharacterCounter(input, counter) {
       if (!input || !counter) return;
@@ -1228,7 +1237,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
             'Content-Type': 'application/json',
             'X-Ember-Token': activeToken
           },
-          body: JSON.stringify({ query: query })
+          body: JSON.stringify({ query: query, conversation_id: conversationId })
         });
 
         if (typingEl) typingEl.remove();
@@ -1253,7 +1262,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
 
         const data = await response.json();
         appendMessage('ember', data.answer, data.meta);
-        if (data.meta && data.meta.route === 'tool_call' && data.answer && !data.answer.includes('FAILED')) {
+        if (data.meta && data.meta.success === true && ['success', 'fallback'].includes(data.meta.status)) {
           showToast('Done');
         }
       } catch (err) {
@@ -1537,6 +1546,11 @@ class EmberHTTPHandler(BaseHTTPRequestHandler):
             raw_body = self.rfile.read(content_length)
             data = json.loads(raw_body.decode("utf-8"))
             query = str(data.get("query", "")).strip()
+            conversation_id = data.get("conversation_id", "default")
+            if (not isinstance(conversation_id, str) or not conversation_id
+                    or len(conversation_id) > 64
+                    or not all(char.isalnum() or char in "_-" for char in conversation_id)):
+                conversation_id = "default"
         except Exception as e:
             self._send_json(400, {"error": f"Invalid JSON body: {e}"})
             return
@@ -1562,6 +1576,7 @@ class EmberHTTPHandler(BaseHTTPRequestHandler):
                     self.server.ctx.registry,
                     self.server.ctx.memory,
                     reply_renderer=self.server.ctx.reply_renderer,
+                    session_id=conversation_id,
                     multi_step_mode=self.server.ctx.multistep_enabled
                 )
         except Exception as e:
@@ -1649,6 +1664,10 @@ class EmberHTTPHandler(BaseHTTPRequestHandler):
             "confidence": result.get("confidence") if result.get("confidence") is not None else result.get("needle_confidence"),
             "tool": tool_name or (result.get("calls")[0]["name"] if result.get("calls") else None),
             "route": result.get("route"),
+            "success": result.get("success"),
+            "status": result.get("status"),
+            "reply_source": (result.get("reply") or {}).get("source"),
+            "reply_reason": (result.get("reply") or {}).get("reason"),
             "rss_current_mb": rss_current_mb,
             "rss_delta_mb": delta_mb,
             "peak_total_mib": round(sample.peak_total / 2**20, 1),

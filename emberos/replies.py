@@ -6,7 +6,7 @@ import sqlite3
 import time
 from collections import Counter
 
-from emberos.responses import format_tool_response
+from emberos.responses import _clean_status_label, format_tool_response
 
 
 MAX_SOURCE_CHARS = 1000
@@ -32,6 +32,20 @@ _NUMBERS = re.compile(r"\d+(?:\.\d+)?%?")
 _QUANTITIES = re.compile(r"(\d+(?:\.\d+)?)\s*(%|[KMGT]i?B|GHz|MHz|Hz)(?!\w)", re.I)
 _REFERENCES = re.compile(r"(?:[A-Za-z]:\\|/|\b[\w.-]+/)[^\s,;]+|\b[\w.-]+\.(?:docx?|pdf|txt|xlsx|pptx|csv|md)\b", re.I)
 _DISPLAY_PREFIX = re.compile(r"^\[(?:OK|FAILED|PARTIAL|UNAVAILABLE|RESULT|FALLBACK)\]\s*")
+_PLATFORM_NAMES = (
+    "windows", "linux", "macos", "mac os", "ubuntu", "debian",
+    "raspbian", "raspberry pi os", "freebsd",
+)
+
+
+def _normalize_capability_word(word):
+    if word in {"this", "emberos"}:
+        return word
+    if word.endswith("ies"):
+        return word[:-3] + "y"
+    if word.endswith("s") and len(word) > 3:
+        return word[:-1]
+    return word
 
 
 def _local_client():
@@ -44,19 +58,55 @@ def _local_client():
 
 
 def original_response(result):
-    return format_tool_response(result) if result.get("route") == "tool_call" else result.get("response", "")
+    if result.get("route") == "tool_call":
+        return format_tool_response(result)
+    return _clean_status_label(result.get("response", ""))
 
 
-def _source(result, original):
+def _source(result, original, query=""):
     """Keep payloads intact. Only bounded, plain outcome messages are rewritten."""
     if result.get("route") == "tool_call":
         if result.get("tool") in _CONTENT_TOOLS:
             return None, "source_content"
         if result.get("tool") == "summarize_file" and result.get("success"):
             return None, "document_summary"
+        if result.get("tool") == "get_agent_context":
+            facts = result.get("data") or result.get("result")
+            if not isinstance(facts, dict):
+                return None, "missing_context_facts"
+            host = facts.get("host_name") or "unknown host"
+            operating_system = facts.get("operating_system") or facts.get("os") or "unknown operating system"
+            parts = [f"The EmberOS backend is the computer {host}, which runs {operating_system}"]
+            session_mode = facts.get("session_mode")
+            if session_mode:
+                parts.append(f"This is a {session_mode} session")
+            model = facts.get("device_model")
+            if model and model != "not detected":
+                parts.append(f"The device model is {model}")
+            source = ". ".join(parts) + "."
+            if len(source) > MAX_SOURCE_CHARS:
+                return None, "context_facts_too_large"
+            return source, ""
+        if result.get("tool") == "get_agent_capabilities":
+            facts = result.get("data") or result.get("result")
+            if not isinstance(facts, dict):
+                return None, "missing_capability_facts"
+            areas = facts.get("capability_areas") or []
+            if not areas:
+                return None, "no_registered_capabilities"
+            if len(areas) == 1:
+                area_list = areas[0]
+            elif len(areas) == 2:
+                area_list = f"{areas[0]} and {areas[1]}"
+            else:
+                area_list = ", ".join(areas[:-1]) + f", and {areas[-1]}"
+            source = f"This EmberOS installation can help with {area_list}."
+            if len(source) > MAX_SOURCE_CHARS:
+                return None, "capability_facts_too_large"
+            return source, ""
         if isinstance(result.get("result"), (dict, list, tuple)):
             return None, "structured_output"
-        source = original.partition("]")[2].strip()
+        source = original.strip()
     elif result.get("route") in {"unresolved_tool_request", "no_action", "error"}:
         source = original.strip()
     else:
@@ -82,13 +132,23 @@ def validate_reply(candidate, source, result):
         return "model_scaffolding"
     if re.search(r"\[[A-Z_ ]+\]", candidate):
         return "generated_status_label"
-    if re.search(r"\bI(?:'ll| will| can| am going to)\b", candidate, re.I):
+    safe_capability_claim = (
+        result.get("tool") == "get_agent_capabilities"
+        and re.match(r"\s*I can (?:help|assist) with\b", candidate, re.I)
+    )
+    if not safe_capability_claim and re.search(r"\bI(?:'ll| will| can| am going to)\b", candidate, re.I):
         return "new_action_promise"
-    if Counter(_NUMBERS.findall(candidate)) != Counter(_NUMBERS.findall(source)):
+    candidate_numbers = Counter(_NUMBERS.findall(candidate))
+    source_numbers = Counter(_NUMBERS.findall(source))
+    if result.get("tool") in {"get_agent_context", "get_agent_capabilities"}:
+        if candidate_numbers - source_numbers:
+            return "invented_context_number"
+    elif candidate_numbers != source_numbers:
         return "changed_numbers"
-    if Counter((number, unit.lower()) for number, unit in _QUANTITIES.findall(candidate)) != Counter(
-        (number, unit.lower()) for number, unit in _QUANTITIES.findall(source)
-    ):
+    if (result.get("tool") not in {"get_agent_context", "get_system_info"}
+            and Counter((number, unit.lower()) for number, unit in _QUANTITIES.findall(candidate)) != Counter(
+                (number, unit.lower()) for number, unit in _QUANTITIES.findall(source)
+            )):
         return "changed_units"
     references = {item.rstrip('.!?\'"') for item in _REFERENCES.findall(source)}
     candidate_references = {item.rstrip('.!?\'"') for item in _REFERENCES.findall(candidate)}
@@ -100,6 +160,41 @@ def validate_reply(candidate, source, result):
     if re.search(r"\bmuted\b", source, re.I) and not re.search(r"\bmuted\b", candidate, re.I):
         return "missing_mute_state"
     data = result.get("data")
+    if result.get("tool") == "get_agent_context" and isinstance(data, dict):
+        for key in ("host_name", "operating_system"):
+            fact = data.get(key)
+            if isinstance(fact, str) and fact and fact.casefold() not in candidate.casefold():
+                return "missing_context_fact"
+        expected_system = str(data.get("operating_system") or "").casefold()
+        for known_system in _PLATFORM_NAMES:
+            if (re.search(rf"\b{re.escape(known_system)}\b", candidate, re.I)
+                    and known_system not in expected_system):
+                return "invented_context_platform"
+    if result.get("tool") == "get_agent_capabilities" and isinstance(data, dict):
+        labels = data.get("capability_areas") or []
+        candidate_words = {
+            _normalize_capability_word(word)
+            for word in re.findall(r"[a-z0-9]+", candidate.casefold())
+        }
+        if not labels or any(
+            not ({_normalize_capability_word(word) for word in re.findall(r"[a-z0-9]+", label.casefold())
+                  if word not in {"and", "the", "for", "to"}} & candidate_words)
+            for label in labels
+        ):
+            return "missing_capability_facts"
+        grounded_words = {
+            _normalize_capability_word(word) for label in labels
+            for word in re.findall(r"[a-z0-9]+", label.casefold())
+        } | {
+            _normalize_capability_word(word) for word in (
+                "i", "can", "help", "assist", "with", "and", "also", "emberos",
+                "this", "installation", "tools", "tool", "areas", "registered",
+                "include", "including", "available", "capability", "capabilities",
+                "features",
+            )
+        }
+        if candidate_words - grounded_words:
+            return "ungrounded_capability_claim"
     if isinstance(data, dict):
         if data.get("muted") is True and not re.search(r"\bmuted\b", candidate, re.I):
             return "missing_mute_state"
@@ -163,14 +258,38 @@ class ReplyRenderer:
         rendered = {"text": original, "original": original, "candidate": "",
                     "source": "original", "reason": "",
                     "elapsed_seconds": 0.0, "generation": None, "history_turn_ids": []}
-        source, reason = _source(result, original)
+        source, reason = _source(result, original, query=query)
         if source is None:
             rendered["reason"] = reason
             return rendered
         started = time.perf_counter()
         try:
+            is_context = result.get("tool") in {"get_agent_context", "get_agent_capabilities"}
             messages = []
-            if memory is not None and result.get("route") == "tool_call":
+            if is_context:
+                if result.get("tool") == "get_agent_capabilities":
+                    instruction = (
+                        "Answer in one brief, natural sentence using only these registered feature areas. "
+                        "Do not add abilities that are not listed."
+                    )
+                else:
+                    instruction = (
+                        "Answer in one brief, natural sentence using only these verified facts. "
+                        "Do not guess the remote client device."
+                    )
+                messages.append({
+                    "role": "system",
+                    "content": instruction,
+                })
+            elif result.get("route") == "tool_call":
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        "Write a concise, natural answer from the current outcome only. "
+                        "Do not repeat the user's request or claim actions the outcome does not confirm."
+                    ),
+                })
+            if memory is not None and result.get("route") == "tool_call" and not is_context:
                 try:
                     for turn in memory.reply_context(result.get("tool")):
                         messages.extend([
@@ -184,21 +303,36 @@ class ReplyRenderer:
                     rendered["history_turn_ids"] = []
                     rendered["history_error"] = str(exc)[:300]
             # Never cut a current request in half (e.g. before a negation).
-            request = f'Respond to "{query}" using this result: ' if query and len(query) <= MAX_QUERY_CHARS else "Respond using this result: "
+            if is_context:
+                request = f"Question: {query}\nFacts: "
+            else:
+                request = f"Request: {query}\nOutcome: " if query and len(query) <= MAX_QUERY_CHARS else "Outcome: "
             messages.append({"role": "user", "content": request + source})
             with self.client_factory() as client:
                 try:
-                    candidate = client.chat(messages, max_tokens=80)
+                    max_tokens = 64 if result.get("tool") == "get_agent_capabilities" else 48 if is_context else 80
+                    candidate = client.chat(messages, max_tokens=max_tokens)
                 finally:
                     rendered["generation"] = client.last_generation
             candidate = candidate.strip()
+            if is_context and query:
+                # This small model sometimes repeats the structured question
+                # header before giving its answer. Remove only that exact
+                # echoed header; the answer still passes the usual fact checks.
+                question_header = re.compile(
+                    rf"^Question:\s*{re.escape(query)}\s*(?:\r?\n\s*)?Answer:\s*",
+                    re.I,
+                )
+                candidate = question_header.sub("", candidate, count=1).strip()
             rendered["candidate"] = candidate
             reason = validate_reply(candidate, source, result)
             if reason:
                 rendered["reason"] = reason
             else:
-                prefix = original.partition("]")[0] + "] " if result.get("route") == "tool_call" else ""
-                rendered.update(text=prefix + candidate, source="smollm2", reason="")
+                display = candidate
+                if result.get("tool") == "get_agent_capabilities":
+                    display += " Individual tools may depend on the platform, hardware, and installed dependencies."
+                rendered.update(text=display, source="smollm2", reason="")
         except KeyboardInterrupt:
             rendered["reason"] = "generation_cancelled"
         except Exception as exc:

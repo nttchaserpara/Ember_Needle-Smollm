@@ -1,6 +1,6 @@
 # Panduan penggunaan terminal Ember
 
-Diperbarui: 14 September 2026. Panduan ini mengikuti kemampuan yang sudah ada,
+Diperbarui: 17 Oktober 2026. Panduan ini mengikuti kemampuan yang sudah ada,
 termasuk batasan yang masih ditemukan. Semua prompt untuk Ember memakai bahasa
 Inggris. Jalankan satu permintaan, tunggu hasilnya, lalu lanjutkan.
 
@@ -83,7 +83,24 @@ disk space
 ```
 
 Keduanya memilih `disk_usage` dalam pengujian Windows terbaru. Hasilnya adalah
-kondisi disk komputer yang menjalankan Ember, dengan baris tool di bawahnya.
+kondisi disk komputer yang menjalankan Ember.
+
+Untuk mengetahui lingkungan backend dan tool yang tersedia:
+
+```text
+Where is this running?
+```
+
+```text
+What can you do?
+```
+
+Jawaban lokasi mengambil nama host, OS, jenis sesi, dan perangkat langsung
+dari komputer yang menjalankan backend. Pertanyaan kemampuan memakai daftar
+tool yang terdaftar di instalasi itu. SmolLM menyusun kalimat dari fakta
+tersebut; ini inferensi saat menjawab, bukan pelatihan atau perubahan bobot.
+Pada koneksi jarak jauh, fakta ini menjelaskan komputer backend. OS laptop yang
+membuka companion tidak ditebak dari data backend.
 
 Untuk melihat daftar tugas yang sudah tersimpan:
 
@@ -101,7 +118,7 @@ Untuk brightness pada layar Windows yang mendukung WMI:
 turn my screen brightness to 30
 ```
 
-Ember membaca ulang persentase dari Windows sebelum menampilkan `[OK]`.
+Ember membaca ulang persentase dari Windows sebelum menampilkan hasil.
 Provider yang tidak mengembalikan `ReturnValue` sekarang tetap diperiksa lewat
 pembacaan ulang, bukan langsung dianggap menolak perubahan. Error Windows dan
 hasil yang tidak sesuai target tetap dilaporkan sebagai gagal atau parsial.
@@ -191,9 +208,16 @@ path salinan tersebut. Mengganti nama ekstensi saja tidak mengonversi isinya.
 Perbaikan 14 September menjaga path `.doc` panjang tetap utuh. Jika model memilih
 ringkasan dengan referensi file yang benar, Ember menjelaskan batasan `.doc` dan
 cara konversinya. Saat confidence rendah, penjelasan diberikan tanpa menjalankan
-tool; pada pemanggilan tool, statusnya `[UNAVAILABLE]`. Ini belum menambahkan
+tool; pada pemanggilan tool, status unsupported disimpan terpisah dari teks
+yang ditampilkan. Ini belum menambahkan
 pembaca `.doc`; tidak ada ringkasan dokumen yang dibuat. Mode balasan natural
 dapat memuat SmolLM untuk menyusun ulang penjelasan keterbatasan tersebut.
+
+Nama file juga dapat disebut sebagian, misalnya `Summarize the robot report`
+atau `Read file robot`. Ember mencari kandidat terbatas di folder pengguna.
+Jika ada beberapa nama yang cocok, pilih nama dan folder yang ditampilkan.
+Penghapusan tetap meminta konfirmasi terhadap file tertentu dan memeriksa
+kembali file tersebut sebelum menghapusnya.
 
 ### Memahami hasil summarize
 
@@ -466,21 +490,21 @@ persiapan paket audio Windows bukan port audio/brightness untuk Linux.
 
 ## 8. Membaca status dan mengetahui batas saat ini
 
-- `tool=disk_usage` menunjukkan tool yang benar-benar dipanggil. Periksa juga
-  hasilnya, bukan confidence saja.
-- `[RESULT]` bisa berasal dari tool lama yang belum menyediakan status rinci;
-  label ini belum membuktikan keberhasilan.
-- `unresolved_tool_request` berarti permintaan belum dapat dijalankan dengan
-  andal. Pesan berikutnya tetap menjadi permintaan baru.
+- Ember tidak lagi menampilkan nama tool, confidence, atau label status di
+  jawaban pengguna. Status dan tool tetap disimpan dalam hasil aplikasi untuk
+  evaluator serta diagnosis pengembang.
+- Permintaan yang belum dapat dipahami akan menyatakan keterbatasannya dengan
+  kalimat biasa. Pesan berikutnya tetap menjadi permintaan baru.
 - `whole-system RAM` mencakup OS dan aplikasi lain. Jangan dijumlahkan lagi
   dengan RSS Ember.
 - `sampled peak RSS (Ember + children)` adalah perkiraan puncak selama job.
   `Ember RSS now` diukur setelah job, saat model mungkin sudah dilepas.
 
 Balasan singkat dari hasil tool sekarang dapat ditulis ulang oleh SmolLM.
-Klarifikasi dengan konteks, pemahaman history yang andal, serta multi-step OS
-actions masih pekerjaan lanjutan. Pertanyaan RAM tersedia juga masih bisa
-salah diarahkan ke informasi RAM terpasang.
+Pertanyaan backend dan kemampuan mengambil fakta instalasi terlebih dahulu.
+File dengan nama sebagian dapat meminta pemilihan kandidat, dan penghapusan
+memerlukan konfirmasi target. Percakapan umum serta pencarian history bahasa
+alami masih terbatas; periksa daftar batasan sebelum mengandalkan tool.
 
 Untuk pengujian ulang setelah pembaruan, coba prompt disk pada bagian 3,
 ringkasan fixture `.txt` pada bagian 4, serta `/memory` pada bagian 5.
@@ -516,8 +540,9 @@ yang sama. Riwayat dipakai sebagai konteks, bukan kondisi perangkat sekarang.
 Ini tidak melatih atau mengubah bobot model. Angka yang sama bisa menghasilkan
 kalimat yang sama; variasi kata bukan ukuran pemahaman.
 
-Status seperti `[OK]`, `[FAILED]`, dan `[PARTIAL]` tetap ditentukan oleh hasil
-tool. Balasan gagal, parsial, dan penolakan wajib mempertahankan seluruh kata
+Teks yang tampil tidak lagi memakai label seperti `[OK]`, `[RESULT]`, atau
+`[PARTIAL]`; status keberhasilan tool tetap tersedia sebagai metadata.
+Balasan gagal, parsial, dan penolakan wajib mempertahankan seluruh kata
 dalam diagnosis asli; tambahan penyebab, lokasi, atau saran memicu fallback.
 JSON, tabel, isi file, hasil pencarian history, dan ringkasan dokumen
 tersaji utuh. Generasi balasan tidak menjalankan ulang tool dan tidak

@@ -4,6 +4,7 @@ set -euo pipefail
 DEB_DIR=${1:?Pass the directory containing built .deb files}
 SITE_DIR=${2:?Pass the output directory for the Pages site}
 SOURCE_DIR=${3:?Pass the repository checkout}
+DEB_VERSION=${4:-0.0.1-4}
 SIGNING_KEY=${APT_SIGNING_KEY:?Set APT_SIGNING_KEY to the armored private key}
 SIGNING_PASSPHRASE=${APT_SIGNING_PASSPHRASE:?Set APT_SIGNING_PASSPHRASE}
 
@@ -43,7 +44,7 @@ for suite in bookworm jammy noble; do
         jammy|noble) arches="amd64" ;;
     esac
     for arch in $arches; do
-        deb="$DEB_DIR/emberos_0.0.1-3_${suite}_${arch}.deb"
+        deb="$DEB_DIR/emberos_${DEB_VERSION}_${suite}_${arch}.deb"
         if [[ ! -s "$deb" ]]; then
             echo "Missing build artifact: $deb" >&2
             exit 1

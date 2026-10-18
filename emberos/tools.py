@@ -16,7 +16,7 @@ from typing import Any, Callable, Optional
 
 from emberos.config import ROOT_DIR, log_dir
 from emberos.outcomes import ToolOutput
-from emberos.platform_detect import IS_LINUX_DESKTOP, IS_WINDOWS
+from emberos.platform_detect import IS_LINUX_DESKTOP, IS_LINUX_HEADLESS, IS_WINDOWS
 from emberos.undo import READ_ONLY_TOOLS, UndoManager, UndoEntry
 
 logger = logging.getLogger("emberos.tools")
@@ -74,6 +74,7 @@ class ToolRegistry:
 
     def __init__(self, memory=None):
         self.memory = memory
+        self.runtime_surface = "EmberOS terminal"
         self._undo = UndoManager()
         self._action_lock = threading.RLock()
         self._tools: dict[str, ToolDef] = {}
@@ -83,6 +84,15 @@ class ToolRegistry:
         if self.memory is None:
             return ToolOutput.failure("Conversation memory is disabled or unavailable.", status="unsupported")
         return self.memory.recall(query, scope=scope)
+
+    def _get_agent_context(self):
+        return _tool_get_agent_context(self)
+
+    def _get_agent_capabilities(self):
+        return _tool_get_agent_capabilities(self)
+
+    def _get_system_info(self):
+        return _tool_get_system_info(self)
 
     def register(self, name: str, description: str, parameters: dict, func: Callable) -> None:
         """Register a tool."""
@@ -368,9 +378,24 @@ class ToolRegistry:
         )
         self.register(
             name="get_system_info",
-            description="Return hardware profile information",
+            description="Return hardware specifications such as CPU cores, installed RAM and GPU. Does not describe agent capabilities or identify the backend host.",
             parameters={},
-            func=_tool_get_system_info,
+            func=self._get_system_info,
+        )
+        self.register(
+            name="get_agent_context",
+            description=("Identify the computer and operating system running the EmberOS backend, "
+                         "including host name, device model and desktop/headless session. For feature questions use get_agent_capabilities."),
+            parameters={},
+            func=self._get_agent_context,
+        )
+        self.register(
+            name="get_agent_capabilities",
+            description=("Describe the feature areas registered by this EmberOS installation, "
+                         "such as file, document, note, task, system, desktop, image and history tools. "
+                         "For host name or operating system use get_agent_context; for hardware use get_system_info."),
+            parameters={},
+            func=self._get_agent_capabilities,
         )
         self.register(
             name="kill_process",
@@ -1120,7 +1145,7 @@ def _tool_close_window(title: str) -> str:
     return f"Closed window: {title}"
 
 
-def _tool_get_system_info() -> ToolResult:
+def _tool_get_system_info(registry: ToolRegistry | None = None) -> ToolResult:
     import platform
     import psutil
 
@@ -1140,6 +1165,90 @@ def _tool_get_system_info() -> ToolResult:
         "cuda_version": None,
     }
     return ToolResult(True, result=info, status="success", data=info)
+
+
+def _tool_get_agent_context(registry: ToolRegistry) -> ToolResult:
+    """Return runtime facts and capability areas from registered tools."""
+    import platform
+    import socket
+
+    registered = {item["name"] for item in registry.list_tools()}
+    capability_groups = (
+        ("file management", {
+            "read_file", "write_file", "list_dir", "find_files", "get_file_info",
+            "copy_file", "move_file", "rename_file", "delete_file", "organize_folder",
+        }),
+        ("document reading and summaries", {
+            "summarize_file", "analyze_files", "batch_read_folder", "folder_explain",
+            "write_document", "create_spreadsheet", "create_google_doc",
+        }),
+        ("notes and tasks", {
+            "create_note", "search_notes", "add_task", "list_tasks", "complete_task",
+            "remove_task",
+        }),
+        ("system and device status", {
+            "get_system_info", "disk_usage", "ram_status", "cpu_info", "system_uptime",
+            "cpu_temperature", "battery_status", "get_volume", "get_brightness",
+        }),
+        ("desktop and application controls", {
+            "launch_app", "open_file", "get_active_window", "get_open_windows",
+            "focus_window", "close_window", "minimize_all_windows",
+        }),
+        ("image and media tools", {
+            "get_image_info", "resize_image", "rotate_image", "convert_image",
+            "extract_audio", "extract_video_clip",
+        }),
+        ("conversation history", {"search_conversation_history"}),
+    )
+    capabilities = [
+        label for label, tool_names in capability_groups
+        if registered.intersection(tool_names)
+    ]
+
+    device_model = ""
+    model_path = Path("/proc/device-tree/model")
+    if model_path.is_file():
+        try:
+            device_model = model_path.read_bytes().replace(b"\0", b"").decode(
+                "utf-8", errors="replace"
+            ).strip()
+        except OSError:
+            pass
+
+    if IS_WINDOWS or IS_LINUX_DESKTOP:
+        session_mode = "desktop"
+    elif IS_LINUX_HEADLESS:
+        session_mode = "headless"
+    else:
+        session_mode = "unknown"
+
+    facts = {
+        "host_name": socket.gethostname() or platform.node() or "unknown host",
+        "operating_system": platform.system(),
+        "machine_architecture": platform.machine(),
+        "device_model": device_model or "not detected",
+        "session_mode": session_mode,
+        "runtime_surface": getattr(registry, "runtime_surface", "EmberOS process"),
+        "capability_areas": capabilities,
+        "capability_note": (
+            "Tools run on this backend host. Individual tools can be unavailable "
+            "because of the current platform, hardware, or installed dependencies."
+        ),
+    }
+    return ToolResult(True, result=facts, status="success", data=facts)
+
+
+def _tool_get_agent_capabilities(registry: ToolRegistry) -> ToolResult:
+    context = _tool_get_agent_context(registry)
+    if not context.success or not isinstance(context.data, dict):
+        return context
+    data = {
+        "capability_areas": context.data.get("capability_areas", []),
+        "capability_note": context.data.get("capability_note", ""),
+        "operating_system": context.data.get("operating_system", "unknown"),
+        "runtime_surface": context.data.get("runtime_surface", "EmberOS process"),
+    }
+    return ToolResult(True, result=data, status="success", data=data)
 
 
 def _tool_kill_process(target: str) -> str:

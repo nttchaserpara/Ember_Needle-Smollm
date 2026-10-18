@@ -39,5 +39,21 @@
   {"query":"Could you show the messages about the workshop?","expected":{"name":"search_conversation_history","arguments":{"query":"workshop"}}},
   {"query":"What did we discuss about CPU temperature?","expected":{"name":"search_conversation_history","arguments":{"query":"CPU temperature"}}},
   {"query":"Review our previous discussion on backups.","expected":{"name":"search_conversation_history","arguments":{"query":"backups"}}},
-  {"query":"Do not recall our earlier discussion.","expected":null}
+  {"query":"Do not recall our earlier discussion.","expected":null},
+  {"query":"Where is this running?","expected":{"name":"get_agent_context","arguments":{}}},
+  {"query":"Where is EmberOS running?","expected":{"name":"get_agent_context","arguments":{}}},
+  {"query":"What system is EmberOS running on?","expected":{"name":"get_agent_context","arguments":{}}},
+  {"query":"What OS is EmberOS running?","expected":{"name":"get_agent_context","arguments":{}}},
+  {"query":"What are your capabilities?","expected":{"name":"get_agent_capabilities","arguments":{}}},
+  {"query":"What tools can I use?","expected":{"name":"get_agent_capabilities","arguments":{}}},
+  {"query":"What can you do?","expected":{"name":"get_agent_capabilities","arguments":{}}},
+  {"query":"What can you help me with?","expected":{"name":"get_agent_capabilities","arguments":{}}},
+  {"query":"Don't tell me where EmberOS is running.","expected":null},
+  {"query":"Show my open windows","expected":{"name":"get_open_windows","arguments":{}}},
+  {"query":"How much RAM is available?","expected":{"name":"ram_status","arguments":{}}},
+  {"query":"What is my CPU temperature?","expected":{"name":"cpu_temperature","arguments":{}}},
+  {"query":"Add a task titled 'APT Pi test'","expected":{"name":"add_task","arguments":{"title":"APT Pi test","due_date":"","priority":"normal"}}},
+  {"query":"Read file robot report","expected":{"name":"read_file","arguments":{"path":"robot report"}}},
+  {"query":"Summarize the robot report","expected":{"name":"summarize_file","arguments":{"path":"robot report"}}},
+  {"query":"Delete file robot report","expected":{"name":"delete_file","arguments":{"path":"robot report"}}}
 ]

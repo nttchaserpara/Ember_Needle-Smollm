@@ -3,8 +3,10 @@
 import hashlib
 import logging
 import os
+import re
 import shutil
 import tarfile
+import time
 import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -39,6 +41,15 @@ _TYPE_EXTENSIONS = {
     "audio": {".mp3", ".wav", ".flac", ".aac", ".ogg"},
     "archive": {".zip", ".tar", ".gz", ".bz2", ".7z", ".rar"},
     "code": {".py", ".js", ".ts", ".java", ".c", ".cpp", ".h", ".rs", ".go", ".html", ".css"},
+}
+
+_REFERENCE_SEARCH_EXCLUDES = {
+    ".git", ".venv", "venv", "env", "node_modules", "__pycache__",
+    ".cache", "runtimes", "models",
+}
+_REFERENCE_STOP_WORDS = {
+    "a", "an", "and", "delete", "file", "files", "find", "for", "in",
+    "my", "of", "please", "read", "the", "this", "to", "summarize",
 }
 
 
@@ -95,6 +106,59 @@ def find_files(query: str, search_root: str = None, file_type: str = None,
     except PermissionError:
         pass
     return results
+
+
+def search_file_references(
+    reference: str,
+    search_root: str = None,
+    *,
+    max_results: int = 8,
+    max_entries: int = 20000,
+    time_budget_seconds: float = 1.5,
+) -> list[str]:
+    """Find bounded filename candidates for a user's partial file reference."""
+    root = Path(search_root) if search_root else Path.home()
+    if not root.is_dir():
+        return []
+
+    raw_name = Path(reference.strip().strip("'\" ")).name
+    normalize = lambda value: re.sub(r"[^a-z0-9]+", " ", value.casefold()).split()
+    tokens = [
+        token for token in normalize(raw_name)
+        if token not in _REFERENCE_STOP_WORDS and len(token) > 1
+    ]
+    if not tokens:
+        return []
+
+    started = time.perf_counter()
+    inspected = 0
+    candidates: list[tuple[int, str]] = []
+    try:
+        for current, directories, files in os.walk(root, topdown=True, followlinks=False):
+            directories[:] = [
+                name for name in directories
+                if name.casefold() not in _REFERENCE_SEARCH_EXCLUDES
+                and not os.path.islink(os.path.join(current, name))
+            ]
+            for name in files:
+                inspected += 1
+                if inspected > max_entries or time.perf_counter() - started > time_budget_seconds:
+                    break
+                path = Path(current) / name
+                if path.is_symlink():
+                    continue
+                name_tokens = normalize(path.name)
+                if all(any(token in part for part in name_tokens) for token in tokens):
+                    exact = int(" ".join(tokens) == " ".join(name_tokens))
+                    candidates.append((exact, str(path.resolve())))
+            if inspected > max_entries or time.perf_counter() - started > time_budget_seconds:
+                break
+    except OSError:
+        # An inaccessible subfolder must not hide matches already found.
+        pass
+
+    candidates.sort(key=lambda item: (-item[0], item[1].casefold()))
+    return [path for _, path in candidates[:max_results]]
 
 
 def read_file_contents(path: str) -> str:

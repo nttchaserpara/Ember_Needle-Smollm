@@ -9,6 +9,7 @@ Jalanin dari root Ember_tools&llm/:
 """
 
 import os
+import re
 import sqlite3
 import sys
 import threading
@@ -39,13 +40,11 @@ def _format_multi_tool_response(result):
     lines = []
     for item in result.get("results", []):
         if item.get("route") == "skipped":
-            lines.append(f"[SKIPPED] {item.get('tool')} (an earlier step failed)")
+            lines.append("I skipped one step because an earlier step failed.")
             continue
         lines.append(format_tool_response(item))
     if result.get("chain_undo_available"):
-        lines.append("(This whole chain can be undone with 'undo'.)")
-    else:
-        lines.append("(Nothing in this chain can be undone.)")
+        lines.append("You can undo this sequence.")
     return "\n".join(lines)
 
 
@@ -67,8 +66,11 @@ CONFIRMATION_WORDS = frozenset({
     "ok", "oke", "iya", "lakukan",
 })
 
-_PENDING_EMPTY = {"tool": None, "params": None, "calls": None, "message": None}
-_pending_confirmation = dict(_PENDING_EMPTY)
+_PENDING_EMPTY = {"tool": None, "params": None, "calls": None, "message": None,
+                  "file_snapshot": None}
+_pending_confirmations = {}
+_pending_file_references = {}
+_recent_file_context = {}
 _pending_lock = threading.RLock()
 
 
@@ -102,32 +104,94 @@ def _build_chain_confirm_message(calls: list[dict]) -> str:
 
 
 def _set_pending_confirmation(*, tool: str | None = None, params: dict | None = None,
-                              calls: list[dict] | None = None, message: str) -> None:
-    global _pending_confirmation
+                              calls: list[dict] | None = None, message: str,
+                              session_id: str = "default",
+                              file_snapshot: dict | None = None) -> None:
     with _pending_lock:
-        _pending_confirmation = {
+        _pending_confirmations[session_id] = {
             "tool": tool,
             "params": deepcopy(params) if params is not None else None,
             "calls": deepcopy(calls) if calls is not None else None,
             "message": message,
+            "file_snapshot": deepcopy(file_snapshot),
         }
 
 
-def _take_pending_confirmation() -> dict | None:
-    global _pending_confirmation
+def _take_pending_confirmation(session_id: str = "default") -> dict | None:
     with _pending_lock:
-        if _pending_confirmation["tool"] is None and not _pending_confirmation["calls"]:
+        current = _pending_confirmations.get(session_id, _PENDING_EMPTY)
+        if current["tool"] is None and not current["calls"]:
             return None
-        pending = deepcopy(_pending_confirmation)
-        _pending_confirmation = dict(_PENDING_EMPTY)
-        return pending
+        return deepcopy(_pending_confirmations.pop(session_id))
 
 
-def _peek_pending_confirmation() -> dict | None:
+def _peek_pending_confirmation(session_id: str = "default") -> dict | None:
     with _pending_lock:
-        if _pending_confirmation["tool"] is None and not _pending_confirmation["calls"]:
+        pending = _pending_confirmations.get(session_id)
+        if pending is None or (pending["tool"] is None and not pending["calls"]):
             return None
-        return deepcopy(_pending_confirmation)
+        return deepcopy(pending)
+
+
+def _set_pending_file_reference(*, action: str, params: dict, candidates: list[str],
+                                message: str, session_id: str) -> None:
+    with _pending_lock:
+        _pending_file_references[session_id] = {
+            "action": action,
+            "params": deepcopy(params),
+            "candidates": list(candidates),
+            "message": message,
+        }
+
+
+def _take_pending_file_reference(session_id: str) -> dict | None:
+    with _pending_lock:
+        pending = _pending_file_references.pop(session_id, None)
+        return deepcopy(pending) if pending is not None else None
+
+
+def _peek_pending_file_reference(session_id: str) -> dict | None:
+    with _pending_lock:
+        pending = _pending_file_references.get(session_id)
+        return deepcopy(pending) if pending is not None else None
+
+
+def _set_recent_file_context(session_id: str, path: str) -> None:
+    with _pending_lock:
+        _recent_file_context[session_id] = str(Path(path).expanduser().resolve())
+
+
+def _get_recent_file_context(session_id: str) -> str | None:
+    with _pending_lock:
+        path = _recent_file_context.get(session_id)
+        return str(path) if path else None
+
+
+def _clear_recent_file_context(session_id: str) -> None:
+    with _pending_lock:
+        _recent_file_context.pop(session_id, None)
+
+
+_CONTEXTUAL_FILE_REFERENCE_RE = re.compile(
+    r"\s*(?:please\s+)?(?:(?:can|could|would)\s+you\s+)?"
+    r"(?P<verb>read|summari[sz]e|delete|remove)\s+"
+    r"(?:(?:the|same|last|previous)\s+)?"
+    r"(?P<reference>it|this|that|this file|that file|same file|last one|previous one)"
+    r"(?:\s+please)?\s*[.!?]?\s*",
+    re.IGNORECASE,
+)
+
+
+def _contextual_file_action(query: str) -> str | None:
+    match = _CONTEXTUAL_FILE_REFERENCE_RE.fullmatch(query)
+    if not match:
+        return None
+    verb = match.group("verb").casefold()
+    if verb == "read":
+        return "read_file"
+    if verb.startswith("summari"):
+        return "summarize_file"
+    return "delete_file"
 
 
 def _confirmation_result(pending: dict) -> dict:
@@ -184,6 +248,17 @@ def _execute_confirmed(registry, pending: dict) -> dict:
 
     tool_name = pending["tool"]
     params = pending.get("params") or {}
+    if tool_name == "delete_file" and pending.get("file_snapshot") is not None:
+        current = _file_snapshot(params.get("path", ""))
+        if current != pending["file_snapshot"]:
+            return _tool_call_result(
+                tool_name, params,
+                ToolResult(
+                    success=False,
+                    error="The file changed or disappeared after confirmation was requested. No file was deleted; please request the action again.",
+                    status="error",
+                ),
+            )
     execute_one = getattr(registry, "execute_confirmed", None)
     exec_result = (execute_one(tool_name, params)
                    if execute_one is not None
@@ -191,28 +266,226 @@ def _execute_confirmed(registry, pending: dict) -> dict:
     return _tool_call_result(tool_name, params, exec_result)
 
 
+_FILE_REFERENCE_TOOLS = frozenset({"read_file", "summarize_file", "delete_file"})
+_FILE_SELECTION_CANCEL = frozenset({"cancel", "cancel it", "never mind", "nevermind", "forget it"})
+_FILE_SELECTION_WAIT = frozenset({"yes", "yeah", "yep", "no", "nope", "ok", "okay"})
+_ORDINAL_CHOICES = {
+    "first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3,
+    "fourth": 4, "4th": 4, "fifth": 5, "5th": 5, "sixth": 6, "6th": 6,
+    "seventh": 7, "7th": 7, "eighth": 8, "8th": 8,
+}
+
+
+def _resolve_file_reference(reference: str) -> list[str]:
+    """Resolve an exact path, or return bounded filename matches under home."""
+    from use_cases.file_ops import search_file_references
+
+    raw = str(reference or "").strip().strip("'\" ")
+    if not raw:
+        return []
+    supplied = Path(raw).expanduser()
+    direct_paths = [supplied]
+    if not supplied.is_absolute():
+        direct_paths.extend((ROOT_DIR / supplied, Path.home() / supplied))
+    existing = []
+    for candidate in direct_paths:
+        try:
+            if candidate.exists():
+                resolved = str(candidate.resolve())
+                if resolved not in existing:
+                    existing.append(resolved)
+        except OSError:
+            continue
+    if existing:
+        return existing
+
+    search_root = Path.home()
+    if not supplied.is_absolute() and supplied.parent != Path("."):
+        for base in (ROOT_DIR, Path.home()):
+            possible_root = (base / supplied.parent).resolve()
+            if possible_root.is_dir():
+                search_root = possible_root
+                break
+    return search_file_references(supplied.name, str(search_root))
+
+
+def _file_snapshot(path: str) -> dict | None:
+    """Capture an exact regular-file identity for a pending delete confirmation."""
+    try:
+        target = Path(path).expanduser()
+        if target.is_symlink() or not target.is_file():
+            return None
+        resolved = target.resolve(strict=True)
+        stat = resolved.stat()
+        return {
+            "path": str(resolved),
+            "device": stat.st_dev,
+            "inode": stat.st_ino,
+            "size": stat.st_size,
+            "mtime_ns": stat.st_mtime_ns,
+            "ctime_ns": stat.st_ctime_ns,
+        }
+    except OSError:
+        return None
+
+
+def _file_reference_question(action: str, reference: str, candidates: list[str]) -> str:
+    rows = [
+        f"{index}. {Path(path).name} — {Path(path).parent}"
+        for index, path in enumerate(candidates, 1)
+    ]
+    verb = {"read_file": "read", "summarize_file": "summarize", "delete_file": "delete"}.get(
+        action, "use"
+    )
+    return (
+        f"I found several files matching '{reference}'. Which one should I {verb}? "
+        "Reply with a filename, folder, or list number. Nothing has been changed.\n"
+        + "\n".join(rows)
+    )
+
+
+def _select_file_candidate(text: str, pending: dict) -> tuple[str | None, bool]:
+    query = " ".join(text.casefold().split()).strip(" .!?'\"")
+    candidates = pending["candidates"]
+    ordinal = None
+    if query.isdigit():
+        ordinal = int(query)
+    else:
+        for word, number in _ORDINAL_CHOICES.items():
+            if re.search(rf"\b{re.escape(word)}\b", query):
+                ordinal = number
+                break
+        if ordinal is None:
+            numbered = re.fullmatch(r"(?:file|option|number|#)\s*#?(\d+)", query)
+            if numbered:
+                ordinal = int(numbered.group(1))
+    if ordinal is not None:
+        return (candidates[ordinal - 1], False) if 1 <= ordinal <= len(candidates) else (None, True)
+
+    scored = []
+    for candidate in candidates:
+        path = Path(candidate)
+        filename = path.name.casefold()
+        folder = path.parent.name.casefold()
+        suffix = path.suffix.casefold().lstrip(".")
+        stem = path.stem.casefold()
+        score = 0
+        if str(path).casefold() in query:
+            score = 100
+        elif filename and filename in query:
+            score = 50
+        if suffix and re.search(rf"\b{re.escape(suffix)}\b", query):
+            score += 5
+        if folder and re.search(rf"\b{re.escape(folder)}\b", query):
+            score += 20
+        words = [word for word in re.findall(r"[a-z0-9]+", stem) if len(word) > 1]
+        query_words = set(re.findall(r"[a-z0-9]+", query))
+        if words and all(word in query_words for word in words):
+            score += 25
+        if score:
+            scored.append((score, candidate))
+    if not scored:
+        return None, False
+    highest = max(score for score, _ in scored)
+    matches = [candidate for score, candidate in scored if score == highest]
+    if len(matches) == 1:
+        return matches[0], False
+    return None, True
+
+
+def _file_clarification_result(pending: dict) -> dict:
+    return {
+        "route": "file_clarification",
+        "tool": pending["action"],
+        "arguments": pending["params"],
+        "success": False,
+        "status": "clarification_required",
+        "response": pending["message"],
+        "display_response": pending["message"],
+    }
+
+
+def _execute_selected_file(registry, pending: dict, selected_path: str,
+                           query: str, memory, reply_renderer, session_id: str):
+    action = pending["action"]
+    params = dict(pending["params"])
+    params["path"] = selected_path
+    if action == "delete_file":
+        outcome = registry.execute_tool(action, params)
+        if _peek_pending_confirmation(session_id) is not None:
+            result = _confirmation_result(_peek_pending_confirmation(session_id))
+        else:
+            result = _tool_call_result(action, params, outcome)
+        return _present_result(result, query, memory, reply_renderer,
+                               render_reply=result.get("route") != "confirmation_required")
+    outcome = registry.execute_tool(action, params)
+    result = _tool_call_result(action, params, outcome)
+    return _present_result(result, query, memory, reply_renderer)
+
+
 class _ConfirmationGateRegistry:
     """Delegate registry operations while holding destructive executions."""
 
-    def __init__(self, registry):
+    def __init__(self, registry, *, session_id: str = "default", query: str = ""):
         self._registry = registry
+        self._session_id = session_id
+        self._query = query
 
     def __getattr__(self, name):
         return getattr(self._registry, name)
 
     def execute_tool(self, name: str, params: dict):
+        params = dict(params)
+        if name in _FILE_REFERENCE_TOOLS:
+            reference = str(params.get("path", ""))
+            candidates = _resolve_file_reference(reference)
+            if not candidates:
+                return ToolResult(
+                    success=False,
+                    error=f"I couldn't find a file matching '{reference}' in your home folder. No file was changed.",
+                    status="error",
+                )
+            if len(candidates) > 1:
+                message = _file_reference_question(name, reference, candidates)
+                _set_pending_file_reference(
+                    action=name, params=params, candidates=candidates,
+                    message=message, session_id=self._session_id,
+                )
+                return ToolResult(success=False, error=message, status="clarification_required",
+                                  message=message)
+            params["path"] = candidates[0]
         if name in DESTRUCTIVE_TOOLS:
+            file_snapshot = None
+            if name == "delete_file":
+                file_snapshot = _file_snapshot(params.get("path", ""))
+                if file_snapshot is None:
+                    return ToolResult(
+                        success=False,
+                        error="I can't safely confirm this deletion because the target is not a regular file. No file was changed.",
+                        status="error",
+                    )
             message = _build_confirm_message(name, params)
-            _set_pending_confirmation(tool=name, params=params, message=message)
+            _set_pending_confirmation(tool=name, params=params, message=message,
+                                      session_id=self._session_id,
+                                      file_snapshot=file_snapshot)
             return ToolResult(success=False, error=message,
                               status="confirmation_required", message=message)
-        return self._registry.execute_tool(name, params)
+        outcome = self._registry.execute_tool(name, params)
+        if name in {"read_file", "summarize_file"}:
+            if getattr(outcome, "success", False):
+                _set_recent_file_context(self._session_id, params.get("path", ""))
+            else:
+                _clear_recent_file_context(self._session_id)
+        return outcome
 
     def execute_tool_chain(self, calls: list[dict]):
         destructive = [call for call in calls if call.get("name") in DESTRUCTIVE_TOOLS]
+        if any(call.get("name") in _FILE_REFERENCE_TOOLS for call in calls):
+            raise ValueError("Resolve file references with a single file request before using multi-step mode.")
         if destructive:
             message = _build_chain_confirm_message(calls)
-            _set_pending_confirmation(calls=calls, message=message)
+            _set_pending_confirmation(calls=calls, message=message,
+                                      session_id=self._session_id)
             results = []
             for call in calls:
                 results.append({
@@ -267,12 +540,16 @@ def _present_result(result, query, memory, reply_renderer, *, render_reply=True)
     return result
 
 
-def handle_request(query, registry, memory=None, *, reply_renderer=None, multi_step_mode=False):
+def handle_request(query, registry, memory=None, *, reply_renderer=None,
+                   multi_step_mode=False, session_id="default"):
     """Keep persistence failures separate from the already executed action."""
-    pending = _take_pending_confirmation()
+    session_id = str(session_id or "default")
+    pending = _take_pending_confirmation(session_id)
     if pending is not None:
         if is_confirmation(query):
             result = _execute_confirmed(registry, pending)
+            if pending.get("tool") == "delete_file":
+                _clear_recent_file_context(session_id)
             return _present_result(result, query, memory, reply_renderer)
         result = {
             "route": "no_action",
@@ -283,6 +560,76 @@ def handle_request(query, registry, memory=None, *, reply_renderer=None, multi_s
         }
         return _present_result(result, query, memory, reply_renderer, render_reply=False)
 
+    pending_file = _take_pending_file_reference(session_id)
+    if pending_file is not None:
+        selected_path, ambiguous = _select_file_candidate(query, pending_file)
+        if selected_path:
+            gated_registry = _ConfirmationGateRegistry(
+                registry, session_id=session_id, query=query
+            )
+            return _execute_selected_file(
+                gated_registry, pending_file, selected_path, query, memory,
+                reply_renderer, session_id,
+            )
+        cleaned = " ".join(query.casefold().split()).strip(" .!?")
+        if cleaned in _FILE_SELECTION_CANCEL:
+            result = {
+                "route": "no_action", "success": False, "status": "cancelled",
+                "response": "File selection cancelled. No file was changed.",
+            }
+            return _present_result(result, query, memory, reply_renderer, render_reply=False)
+        if ambiguous or cleaned in _FILE_SELECTION_WAIT:
+            _set_pending_file_reference(
+                action=pending_file["action"], params=pending_file["params"],
+                candidates=pending_file["candidates"], message=pending_file["message"],
+                session_id=session_id,
+            )
+            return _present_result(_file_clarification_result(pending_file), query,
+                                   memory, reply_renderer, render_reply=False)
+        # A different request replaces the pending question; it must not be
+        # swallowed as a file choice. Continue routing this text normally.
+        _clear_recent_file_context(session_id)
+
+    contextual_action = _contextual_file_action(query)
+    if contextual_action:
+        recent_path = _get_recent_file_context(session_id)
+        if recent_path is None:
+            result = {
+                "route": "no_action",
+                "success": False,
+                "status": "unresolved_reference",
+                "response": (
+                    "I don't know which file that refers to. Read or select a file first, "
+                    "or name the file you mean. No file was changed."
+                ),
+            }
+            return _present_result(result, query, memory, reply_renderer, render_reply=False)
+
+        gated_registry = _ConfirmationGateRegistry(
+            registry, session_id=session_id, query=query
+        )
+        params = {"path": recent_path}
+        outcome = gated_registry.execute_tool(contextual_action, params)
+        pending_confirmation = _peek_pending_confirmation(session_id)
+        if pending_confirmation is not None:
+            result = _confirmation_result(pending_confirmation)
+            return _present_result(
+                result, query, memory, reply_renderer, render_reply=False
+            )
+        pending_file = _peek_pending_file_reference(session_id)
+        if pending_file is not None:
+            return _present_result(
+                _file_clarification_result(pending_file), query, memory,
+                reply_renderer, render_reply=False,
+            )
+        result = _tool_call_result(contextual_action, params, outcome)
+        return _present_result(result, query, memory, reply_renderer)
+
+    # Pronouns only inherit a target for an immediate follow-up. Any other
+    # request ends that context so an old read can never silently retarget a
+    # later destructive command.
+    _clear_recent_file_context(session_id)
+
     try:
         memory_response = memory_command(query, memory)
     except (OSError, sqlite3.Error, ValueError) as exc:
@@ -292,7 +639,9 @@ def handle_request(query, registry, memory=None, *, reply_renderer=None, multi_s
         # and displaying history must not recursively fill the history.
         return {"route": "memory_view", "response": memory_response}
     try:
-        gated_registry = _ConfirmationGateRegistry(registry)
+        gated_registry = _ConfirmationGateRegistry(
+            registry, session_id=session_id, query=query
+        )
         if multi_step_mode:
             result = route_and_execute(query, gated_registry, multi_step_mode=True)
         else:
@@ -302,10 +651,14 @@ def handle_request(query, registry, memory=None, *, reply_renderer=None, multi_s
     except Exception as exc:
         result = {"route": "error", "response": f"Request failed: {exc}",
                   "status": "error", "success": False}
-    pending = _peek_pending_confirmation()
+    pending = _peek_pending_confirmation(session_id)
     if pending is not None:
         result = _confirmation_result(pending)
         return _present_result(result, query, memory, reply_renderer, render_reply=False)
+    pending_file = _peek_pending_file_reference(session_id)
+    if pending_file is not None:
+        return _present_result(_file_clarification_result(pending_file), query,
+                               memory, reply_renderer, render_reply=False)
     return _present_result(result, query, memory, reply_renderer)
 
 
@@ -403,22 +756,11 @@ def main():
 
         if result["route"] == "tool_call":
             print(result.get("display_response") or format_tool_response(result))
-            confidence = result.get("confidence")
-            confidence_text = f"{confidence:.2f}" if confidence is not None else "unknown"
-            print(f"  [tool={result['tool']} | confidence={confidence_text}]")
         elif result["route"] == "multi_tool_call":
             print(result.get("display_response"))
-            ran = sum(1 for item in result.get("results", []) if item.get("route") != "skipped")
-            total = len(result.get("calls", []))
-            confidence = result.get("confidence")
-            confidence_text = f"{confidence:.2f}" if confidence is not None else "unknown"
-            print(f"  [multi-step: {ran}/{total} steps ran | confidence={confidence_text}]")
         elif result["route"] == "memory_view":
             print(result.get("display_response") or result["response"])
         else:
-            conf = result.get("needle_confidence")
-            conf_str = f"{conf:.2f}" if conf is not None else "None"
-            print(f"[route={result['route']} | Needle confidence={conf_str}]")
             print(result.get("display_response") or result["response"])
 
         _print_benchmark("request", time.perf_counter() - started, rss_before, sample)
