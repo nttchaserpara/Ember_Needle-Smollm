@@ -112,6 +112,19 @@ def main() -> int:
                      "running_processes", "system_uptime", "cpu_info"):
             args = {"filter_name": "python"} if name == "running_processes" else {}
             call(name, args)
+        context = call("get_agent_context")
+        if (not context.data.get("host_name")
+                or context.data.get("operating_system") != platform.system()
+                or not context.data.get("session_mode")):
+            raise AssertionError(
+                f"get_agent_context returned incomplete runtime facts: {context.data}"
+            )
+        capabilities = call("get_agent_capabilities")
+        if (not capabilities.data.get("capability_areas")
+                or capabilities.data.get("operating_system") != platform.system()):
+            raise AssertionError(
+                f"get_agent_capabilities returned incomplete runtime facts: {capabilities.data}"
+            )
         optional_sensor("cpu_temperature")
         optional_sensor("battery_status")
 
