@@ -117,6 +117,8 @@ runuser -u emberos-smoke -- env HOME=/home/emberos-smoke \
 # Verify a just-read file remains the only target for a contextual delete, and
 # that the confirmation gate never deletes it without an explicit yes.
 runuser -u emberos-smoke -- env HOME=/home/emberos-smoke \
+    EMBER_DATA_DIR=/home/emberos-smoke/.local/share/emberos \
+    PYTHONPATH=/opt/emberos \
     /opt/emberos/venv/bin/python /opt/emberos/scripts/test_file_reference.py
 
 # Verify the private LAN session and mDNS record contract without opening a
