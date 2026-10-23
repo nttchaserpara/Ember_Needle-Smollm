@@ -36,7 +36,7 @@ Angka dan boolean dipertahankan; string disimpan sebagai teks literal,
 termasuk teks yang diawali `=`. Fitur ini belum mengedit workbook yang sudah ada.
 
 ```text
-Create an Excel spreadsheet at "C:\Users\natta\Documents\belanja.xlsx" with rows [["Item", "Qty"], ["Milk", 2]]
+Create an Excel spreadsheet at "C:\Users\YOUR_USER\Documents\belanja.xlsx" with rows [["Item", "Qty"], ["Milk", 2]]
 ```
 
 `write_document` juga mendukung `.xlsx` dengan `content` berformat CSV.
@@ -64,11 +64,11 @@ Integrasi menggunakan OAuth aplikasi Desktop dan Google Docs API, sesuai
    Scope ini digunakan untuk dokumen yang dibuat atau diberikan akses ke aplikasi,
    bukan akses umum ke seluruh Drive.
 5. Pada Clients, buat OAuth client bertipe **Desktop app**, lalu unduh JSON-nya.
-   Simpan di luar folder proyek, misalnya `C:\Users\natta\Documents\ember-google-credentials.json`.
+   Simpan di luar folder proyek, misalnya `C:\Users\YOUR_USER\Documents\ember-google-credentials.json`.
 6. Dari folder proyek, jalankan:
 
 ```powershell
-.\venv\Scripts\python.exe -m use_cases.google_docs --connect "C:\Users\natta\Documents\ember-google-credentials.json"
+.\venv\Scripts\python.exe -m use_cases.google_docs --connect "C:\Users\YOUR_USER\Documents\ember-google-credentials.json"
 ```
 
 7. Pilih akun Google di browser dan izinkan akses yang diminta. Login diberi

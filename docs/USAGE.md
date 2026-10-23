@@ -14,7 +14,7 @@ Langsung ke: [Windows](#2-menjalankan-di-windows--terminal-vs-code),
 ## 1. Bedakan terminal dengan prompt Ember
 
 - **PowerShell Windows** menampilkan awalan seperti `PS C:\...>`.
-- **Shell Pi melalui SSH** menampilkan awalan seperti `natta@emberos-zero2w:~ $`.
+- **Shell Pi melalui SSH** menampilkan awalan seperti `USER_PI@HOST_PI:~ $`.
 - **Ember yang sedang berjalan** menampilkan `You>`.
 
 Perintah `python`, `pip`, `cd`, setup, dan benchmark dijalankan di shell.

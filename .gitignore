@@ -28,3 +28,33 @@ runtimes/
 # Keep small input fixtures and routing cases for on-device benchmarks.
 /experiments/*.py
 /experiments/results/
+
+# Temporary files, editor state, and test caches.
+/tmp/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Local configuration and credentials (examples may be committed).
+.env
+.env.*
+!.env.example
+credentials.json
+*-credentials.json
+client_secret*.json
+token.json
+*_token.json
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Private research drafts and discussion preferences; retain local copies.
+/ANALISIS_ARAH_RISET_AGENT_SLM.md
+/PREFERENSI_DISKUSI_RISET.md

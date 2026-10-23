@@ -132,7 +132,9 @@ named-target extraction was not reliable. These are known routing limits,
 not successful undo tests. Reports: `logs/undo-routing-after.json` and
 `logs/undo-routing-cases.json` (local).
 
-The description and target-grounding changes on 15 September are measured
-separately in [PI_VALIDATION.md](PI_VALIDATION.md). Failed phrases remain
+The measurements above are historical local runs; their raw reports are not
+included in this repository. Use the commands above to measure the current
+checkout and the [review guide](../REVIEW_GUIDE.md) to distinguish regression
+checks from physical-device validation. Failed phrases remain
 positive expectations in the fixture. The negation case additionally requires
 the `no_action` route, rather than merely accepting any result with no execution.

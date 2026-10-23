@@ -153,6 +153,7 @@ creating the tag:
    - `APT_SIGNING_KEY`: the complete armored private key, including the
      `BEGIN` and `END PGP PRIVATE KEY BLOCK` lines from the exported file.
    - `APT_SIGNING_PASSPHRASE`: the passphrase used for that key.
+
 4. From PowerShell in the repository folder, after the pull request is merged,
    create and push a tag pointing at the latest `main` commit:
 
