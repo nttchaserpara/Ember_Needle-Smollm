@@ -7,16 +7,40 @@ package bundles the app's Python environment, the Needle native engine, the
 SmolLM2 model, and a generic CPU `llama-server`. The model makes the download
 large; the first use does not need to fetch these runtime files.
 
-After the signed APT repository has been published, configure it once and then
-install EmberOS by package name:
+## Install with APT
+
+Run these commands in the Linux/Pi terminal (or its SSH session). EmberOS is
+not in the default Debian/Ubuntu repositories: configure the signed EmberOS
+repository once before installing by package name. Raspberry Pi requires a
+64-bit OS (`arm64`); `armhf` packages are not available. Ubuntu packages in
+this matrix are `amd64` only.
 
 ```sh
+sudo apt update
+sudo apt install curl ca-certificates
 curl -fsSL https://nttchaserpara.github.io/Ember_Needle-Smollm/install-apt.sh \
-  -o /tmp/emberos-install-apt.sh
-sudo sh /tmp/emberos-install-apt.sh
-sudo apt-get update
-sudo apt-get install emberos
+  -o /tmp/emberos-install-apt.sh && sudo sh /tmp/emberos-install-apt.sh
+sudo apt update
+apt-cache policy emberos
+sudo apt install emberos
 ```
+
+Continue only after repository setup and `apt update` succeed. The candidate
+version must not be `(none)`. The setup script installs the repository keyring
+and `/etc/apt/sources.list.d/emberos.sources`. No Git clone, separate venv, or
+model download script is needed for this bundled package.
+
+For later updates, with the repository already configured:
+
+```sh
+sudo apt update
+sudo apt install --only-upgrade emberos
+```
+
+APT installs a published package release, not the latest source commit on
+`main`. A documentation or source push alone does not publish a new package.
+
+## Launch the installed app
 
 Start the chat GUI with `emberos`; on a Linux desktop it opens a standalone
 Chromium/Chrome/Edge/Brave app window when one is installed, and otherwise uses
@@ -58,6 +82,27 @@ Use `emberos-cli` (or `emberos --cli`) for the terminal interface. Check the
 installed version with `emberos --version`.
 State, notes, tasks, and logs live under `${XDG_DATA_HOME:-~/.local/share}/emberos`
 for the current user. Removing the package leaves this user data in place.
+
+## Troubleshooting installation
+
+If APT reports `Unable to locate package emberos` or no candidate version,
+check the OS, architecture, repository configuration, and update output:
+
+```sh
+. /etc/os-release
+echo "$VERSION_CODENAME"
+dpkg --print-architecture
+cat /etc/apt/sources.list.d/emberos.sources
+sudo apt update
+apt-cache policy emberos
+```
+
+The supported combinations are `bookworm/arm64`, `bookworm/amd64`,
+`jammy/amd64`, and `noble/amd64`. If the sources file is missing, repeat the
+repository setup above. For download, TLS, or signing-key errors, resolve the
+reported network/certificate/key issue before installing; do not disable APT
+signature verification. Other OS releases require a compatible published
+package or the [source setup](../../README.md#menjalankan-dari-source).
 
 ## Check an installed device
 

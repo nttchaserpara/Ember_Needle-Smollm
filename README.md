@@ -11,7 +11,7 @@ dan tool yang tersedia. Belum ada klaim bahwa seluruh fitur andal pada Pi.
 
 **Mulai dari sini:** [panduan review mentor](docs/REVIEW_GUIDE.md) ·
 [panduan penggunaan](docs/USAGE.md) · [arsitektur](docs/ARCHITECTURE.md) ·
-[pengembangan dan evaluasi](CONTRIBUTING.md)
+[pengembangan dan evaluasi](CONTRIBUTING.md) · [instalasi APT](#instalasi-dengan-apt-linux--raspberry-pi)
 
 ## Kemampuan dan batasnya
 
@@ -27,6 +27,55 @@ dan tool yang tersedia. Belum ada klaim bahwa seluruh fitur andal pada Pi.
 Jika generasi ringkasan gagal, Ember dapat menampilkan **extractive summary**
 dari kalimat sumber. Itu adalah fallback yang diberi label, bukan keberhasilan
 generasi model. Riwayat dan konteks saat inferensi tidak melatih bobot model.
+
+## Instalasi dengan APT (Linux / Raspberry Pi)
+
+Paket tersedia untuk Raspberry Pi OS/Debian 12 **bookworm** (`arm64`/`amd64`),
+Ubuntu 22.04 **jammy** (`amd64`), dan Ubuntu 24.04 **noble** (`amd64`).
+Pi harus memakai OS 64-bit; paket `armhf`/32-bit belum tersedia.
+Jalankan perintah berikut di terminal Linux/Pi, termasuk melalui SSH.
+
+**Setup pertama kali:** EmberOS memakai repository APT sendiri, jadi tambahkan
+repository tersebut sebelum menjalankan `sudo apt install emberos`.
+
+```bash
+sudo apt update
+sudo apt install curl ca-certificates
+curl -fsSL https://nttchaserpara.github.io/Ember_Needle-Smollm/install-apt.sh \
+  -o /tmp/emberos-install-apt.sh && sudo sh /tmp/emberos-install-apt.sh
+sudo apt update
+apt-cache policy emberos
+sudo apt install emberos
+```
+
+Lanjutkan instalasi setelah setup repository dan `apt update` berhasil.
+`apt-cache policy emberos` harus menampilkan versi pada `Candidate`, bukan
+`(none)`. Paket sudah menyertakan environment Python, Needle, model SmolLM2,
+dan runtime llama.cpp, sehingga tidak perlu clone repo atau setup venv/model
+secara terpisah. Ukuran unduhannya lebih besar karena model ikut dibundel.
+
+Jalankan sebagai pengguna biasa setelah instalasi:
+
+```bash
+emberos --version
+emberos-cli
+```
+
+`emberos` membuka GUI pada desktop Linux. Untuk Pi headless, gunakan
+`emberos-cli` melalui SSH atau ikuti [setup companion](docs/setup/DEBIAN_PACKAGE.md)
+untuk membuka GUI dari komputer lain.
+
+Untuk memperbarui instalasi yang repository-nya sudah dikonfigurasi:
+
+```bash
+sudo apt update
+sudo apt install --only-upgrade emberos
+```
+
+APT memasang **rilis paket yang dipublikasikan**, bukan otomatis commit terbaru
+di `main`. Jika muncul `Unable to locate package emberos`, periksa setup
+repository, hasil `apt update`, codename OS, dan arsitektur sesuai
+[panduan APT lengkap](docs/setup/DEBIAN_PACKAGE.md#troubleshooting-installation).
 
 ## Menjalankan dari source
 

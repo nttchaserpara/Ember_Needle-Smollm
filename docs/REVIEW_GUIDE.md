@@ -20,7 +20,11 @@ fitur belum membuktikan kontribusi riset atau reliabilitas agent secara umum.
 
 ## Demo untuk review
 
-Siapkan source mengikuti README. Jalankan prompt di `You>` satu per satu.
+Untuk Linux/Pi yang didukung, gunakan [instalasi APT di README](../README.md#instalasi-dengan-apt-linux--raspberry-pi)
+dan jalankan `emberos-cli`. Alternatifnya, siapkan source mengikuti README.
+Jalankan prompt di `You>` satu per satu. Pada instalasi APT, gunakan path
+`/opt/emberos/experiments/fixtures/sample-summary.txt` untuk demo ringkasan;
+path relatif pada tabel berikut berlaku jika berjalan dari root checkout.
 
 | Langkah | Prompt | Yang diperiksa |
 | --- | --- | --- |
