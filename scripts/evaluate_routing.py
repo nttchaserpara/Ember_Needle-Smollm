@@ -20,7 +20,7 @@ from emberos.tools import ToolRegistry, ToolResult
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--cases", type=Path, default=ROOT / "experiments/routing_cases.json",
+    parser.add_argument("--cases", type=Path, required=True,
                         help="Routing fixture file; execution is always replaced by a recorder")
     parser.add_argument("--without-memory", action="store_true",
                         help="Disable conversation storage; production intent guards remain enabled")

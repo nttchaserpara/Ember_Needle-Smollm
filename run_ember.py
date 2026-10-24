@@ -2,7 +2,7 @@
 run_ember.py
 
 Entry point beneran -- ketik query kamu sendiri, bukan list query yang
-udah ditentuin kayak di experiments/. Ini yang bakal jadi "produk" jalan.
+sudah ditentukan sebelumnya.
 
 Jalanin dari root Ember_tools&llm/:
     python run_ember.py

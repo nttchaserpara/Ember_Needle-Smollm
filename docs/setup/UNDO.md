@@ -1,5 +1,8 @@
 # Undo one action
 
+Evaluation commands using `--cases` require your own local JSON cases; replace
+`/path/to/...` with an existing file. Evaluation datasets are not included.
+
 Updated 15 September 2026. Ask `undo it` to restore the last supported change
 performed by the current Ember session. Undo is a normal Needle-selected tool,
 not a slash command, response mode, or keyword shortcut. The executor owns its
@@ -100,8 +103,8 @@ child processes. Native device adapters are not exercised by this script.
 Routing-only regression with execution replaced by a recorder:
 
 ```powershell
-.\venv\Scripts\python.exe scripts/evaluate_routing.py --cases experiments/undo_routing_cases.json --output logs/undo-routing.json
-.\venv\Scripts\python.exe scripts/evaluate_routing.py --output logs/routing.json
+.\venv\Scripts\python.exe scripts/evaluate_routing.py --cases /path/to/undo-cases.json --output logs/undo-routing.json
+.\venv\Scripts\python.exe scripts/evaluate_routing.py --cases /path/to/routing-cases.json --output logs/routing.json
 ```
 
 Use the Linux interpreter for the same scripts on Pi. The routing report counts
@@ -134,7 +137,6 @@ not successful undo tests. Reports: `logs/undo-routing-after.json` and
 
 The measurements above are historical local runs; their raw reports are not
 included in this repository. Use the commands above to measure the current
-checkout and the [development guide](../../CONTRIBUTING.md) to distinguish regression
-checks from physical-device validation. Failed phrases remain
+checkout. Distinguish regression checks from physical-device validation. Failed phrases remain
 positive expectations in the fixture. The negation case additionally requires
 the `no_action` route, rather than merely accepting any result with no execution.

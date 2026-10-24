@@ -1,5 +1,8 @@
 # Natural replies
 
+Evaluation commands using `--cases` require your own local JSON cases; replace
+`/path/to/...` with an existing file. Evaluation datasets are not included.
+
 Updated 17 October 2026. Short outcomes automatically use the existing
 SmolLM2-135M-Instruct Q4_K_M through llama.cpp. Needle selects the tool, the
 executor returns its outcome, then SmolLM writes the response. If generation
@@ -113,11 +116,11 @@ outcomes and explicit saved histories, without executing OS actions or writing
 the user's conversation database:
 
 ```powershell
-.\venv\Scripts\python.exe scripts/evaluate_replies.py --output logs/replies.json
+.\venv\Scripts\python.exe scripts/evaluate_replies.py --cases /path/to/reply-cases.json --output logs/replies.json
 ```
 
 ```sh
-./venv/bin/python scripts/evaluate_replies.py --output logs/pi-replies.json
+./venv/bin/python scripts/evaluate_replies.py --cases /path/to/reply-cases.json --output logs/pi-replies.json
 ```
 
 Use `--case volume_changed_with_history` to select one case. Each case has an
@@ -154,15 +157,14 @@ with 10 generated replies and 7 fallbacks among 17 eligible cases. However,
 accepted deletion/brightness errors added an unsupported location or replaced
 the cause. Those were false acceptances, not successful factual paraphrases.
 The diagnostic check above closes that observed gap. Captured bad candidates
-are permanent fixtures, replayed regardless of future model output:
+can be replayed from your local cases file regardless of future model output:
 
 ```sh
-./venv/bin/python scripts/evaluate_replies.py --validation-only --output logs/pi-reply-guards.json
+./venv/bin/python scripts/evaluate_replies.py --cases /path/to/reply-cases.json --validation-only --output logs/pi-reply-guards.json
 ```
 
 The full evaluator also runs these checks and reports them under
 `validation_regressions`. It still reports generation coverage separately;
 falling back accurately must not be presented as improved generation quality.
 The measurements above are historical local runs, not a fresh validation of
-every revision. For reproducible evaluation commands, see the
-[development guide](../../CONTRIBUTING.md).
+every revision. Use the commands above with your own local cases to reproduce an evaluation.

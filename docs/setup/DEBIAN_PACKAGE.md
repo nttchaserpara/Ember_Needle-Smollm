@@ -1,5 +1,8 @@
 # EmberOS Debian package
 
+Evaluation commands using `--cases` require your own local JSON cases; replace
+`/path/to/...` with an existing file. Evaluation datasets are not included.
+
 EmberOS 0.0.1 is built as one `.deb` per CPU architecture and Linux suite. The
 initial matrix is Raspberry Pi OS/Debian 12 (`bookworm`, `arm64` and `amd64`),
 Ubuntu 22.04 (`jammy`, `amd64`), and Ubuntu 24.04 (`noble`, `amd64`). Each
@@ -121,7 +124,7 @@ actions, run the routing cases with a recording executor:
 
 ```sh
 EMBER_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/emberos" \
-  /opt/emberos/venv/bin/python /opt/emberos/scripts/evaluate_routing.py \
+  /opt/emberos/venv/bin/python /opt/emberos/scripts/evaluate_routing.py --cases /path/to/routing-cases.json \
   --output /tmp/emberos-routing.json --without-memory
 ```
 
@@ -156,7 +159,7 @@ lists no `children_still_running` processes:
 ```sh
 EMBER_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/emberos" \
   /opt/emberos/venv/bin/python /opt/emberos/scripts/benchmark_local_llm.py \
-  --direct-tool --document /opt/emberos/experiments/fixtures/sample-summary.txt
+  --direct-tool
 ```
 
 On the Pi, also record `free -h` before and during this model test. An arm64 CI

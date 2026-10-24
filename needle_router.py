@@ -16,7 +16,7 @@ route_and_execute().
 Default-value params harus sama dengan implementasi di ToolRegistry.
 
 Dipakai dari luar: import route_and_execute, panggil dengan (query, registry).
-Buat contoh pemakaian/test, lihat experiments/test_router.py.
+Buat contoh pemakaian/test, lihat scripts/test_directory_listing.py.
 """
 
 import json

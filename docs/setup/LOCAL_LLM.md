@@ -1,5 +1,8 @@
 # Local summaries with SmolLM2 Q4 and llama.cpp
 
+Evaluation commands using `--cases` require your own local JSON cases; replace
+`/path/to/...` with an existing file. Evaluation datasets are not included.
+
 Ember uses the existing SmolLM2-135M-Instruct model in GGUF Q4_K_M format.
 No training or conversion is performed. Needle still selects tools.
 PyTorch and Transformers are not imported by the local summary path.
@@ -107,10 +110,10 @@ This is an initial compatibility and memory trial, not a completed Linux port.
 Connect from another computer over SSH, then run all commands below in the Pi's
 terminal from the cloned project root. Files, processes and resource readings
 will belong to the Pi. Windows paths such as `D:\Downloads` do not refer to files
-on the Pi; use the cloned fixtures or copy files there first.
+on the Pi; copy your documents to the Pi first.
 
 Start with the base requirements and plain text. Additional PDF/OCR/desktop
-packages are not needed for these fixtures. `psutil` may require compilation
+packages are not needed for plain-text documents. `psutil` may require compilation
 if no compatible wheel exists; install `python3-dev` if pip reports missing
 Python development headers. Needle also needs its platform-specific native
 engine, fetched on first use; test its import before attempting full requests:
@@ -119,7 +122,7 @@ engine, fetched on first use; test its import before attempting full requests:
 uname -m
 free -h
 ./venv/bin/python -c 'import needle_router; print("Needle initialized")'
-./venv/bin/python scripts/evaluate_routing.py --output logs/pi-routing.json
+./venv/bin/python scripts/evaluate_routing.py --cases /path/to/routing-cases.json --output logs/pi-routing.json
 ```
 
 The routing evaluation records decisions without executing real tools. Several
@@ -151,8 +154,8 @@ conversation-history/memory routing failures noted elsewhere, or the two
 `cpu_temperature` false positives.
 
 ```sh
-./venv/bin/python scripts/benchmark_local_llm.py --document experiments/fixtures/sample-summary.txt
-./venv/bin/python scripts/benchmark_local_llm.py --document experiments/fixtures/pi-long-report.txt
+./venv/bin/python scripts/benchmark_local_llm.py
+./venv/bin/python scripts/benchmark_local_llm.py --document /path/to/your-report.txt
 ```
 
 If these commands report `unresolved_tool_request` with no child process, Needle
@@ -160,8 +163,8 @@ stopped the request before model startup. This is not a measurement of SmolLM2.
 To isolate the native model runtime, explicitly select the direct-tool benchmark:
 
 ```sh
-./venv/bin/python scripts/benchmark_local_llm.py --direct-tool --document experiments/fixtures/sample-summary.txt
-./venv/bin/python scripts/benchmark_local_llm.py --direct-tool --document experiments/fixtures/pi-long-report.txt
+./venv/bin/python scripts/benchmark_local_llm.py --direct-tool
+./venv/bin/python scripts/benchmark_local_llm.py --direct-tool --document /path/to/your-report.txt
 ```
 
 Direct mode runs the real `summarize_file` tool but does not import Needle.
@@ -178,23 +181,12 @@ in a sequence but fails in a fresh process. Do not infer that the runtime or
 model file is broken from a low routing confidence alone. These diagnostics can
 contain request details; keep saved reports local.
 
-The long fixture is a fictional English workshop review with facts spread across
-the beginning, middle and end. Check whether the result retains the decision
-to reopen ten of twelve machines, keep two unavailable until repair and another
-inspection, and hold the next review on 28 November 2026. A short summary need
-not include every number. Reject invented facts and reversed decisions.
+For longer documents, check facts from the beginning, middle, and end against
+the generated summary. Reject invented facts and reversed decisions.
 An extractive fallback demonstrates failure handling, not successful generative
 summarization. Inspect `result.route`, `result.tool`, `result.status` and the
 actual output alongside RAM figures; a refused request did not benchmark model
 generation. `children_still_running` should be empty after the job.
-
-The supplied long fixture contains 1,637 words (11,008 bytes). An initial Windows
-run reached the generation token limit, returned a very short extractive result,
-and left no model processes running. Its sampled parent-plus-children peak was
-264.88 MiB and elapsed time was 5.71 seconds. This checks lifecycle/fallback
-behavior; the result omitted major facts and is not a passing summary-quality
-example. Measure the Pi independently rather than treating these figures as
-its expected memory use or speed.
 
 For a repeat of the long job, invoke the command again. Also monitor `free -h`
 and `vmstat 1` in a second SSH terminal. Record available system RAM, swap
@@ -202,7 +194,7 @@ activity, total request time, and whether the machine remains responsive. The
 benchmark's RSS sum does not include the whole OS and can count shared pages
 more than once. Do not infer that the Pi fits from a Windows result.
 
-For interactive summarization, run `realpath experiments/fixtures/pi-long-report.txt`
+For interactive summarization, run `realpath /path/to/your-report.txt`
 in the shell, start `./venv/bin/python run_ember.py`, and enter `Summarize` followed
 by that absolute path in double quotes at `You>`. Shell commands belong at the
 shell prompt, not inside Ember's `You>` prompt.
@@ -310,9 +302,9 @@ additional build target requirements.
 The old root entry point forwards to the same script:
 
 ```sh
-./venv/bin/python scripts/bench_short_response.py --mode both --n 10 --output logs/pi-worker-modes.json
-./venv/bin/python scripts/bench_short_response.py --mode sleep-wake --sleep-idle 90 --output logs/pi-sleep-90.json
-./venv/bin/python scripts/bench_short_response.py --mode sleep-wake --sleep-idle 30 --output logs/pi-sleep-30.json
+./venv/bin/python scripts/bench_short_response.py --cases /path/to/reply-cases.json --mode both --n 10 --output logs/pi-worker-modes.json
+./venv/bin/python scripts/bench_short_response.py --cases /path/to/reply-cases.json --mode sleep-wake --sleep-idle 90 --output logs/pi-sleep-90.json
+./venv/bin/python scripts/bench_short_response.py --cases /path/to/reply-cases.json --mode sleep-wake --sleep-idle 30 --output logs/pi-sleep-30.json
 ```
 
 The last two commands each run identical cold/warm/wake prompts. They sample
@@ -347,21 +339,12 @@ can miss brief peaks, and can double-count shared pages in the RSS sum.
 Confidence scores are not portable between platforms; see "ARM confidence gap
 and platform-aware threshold" above.
 
-On the development PC, if the local test files are present, run backend/fallback
-tests without loading a model. These tests are excluded from Git and are not
-required for setup or available in a fresh Pi clone:
-
-
-
-```sh
-./venv/bin/python -m unittest experiments.test_local_llm -v
-```
-
-Run an actual English document job through Ember:
+Run an English document job through Ember. Without `--document`, the benchmark
+creates a short temporary document; pass `--document /path/to/your-report.txt`
+to use your own file:
 
 ```sh
 ./venv/bin/python scripts/benchmark_local_llm.py
-./venv/bin/python scripts/benchmark_local_llm.py --document experiments/fixtures/sample-summary.txt
 ```
 
 On Windows use `.\venv\Scripts\python.exe` instead. The benchmark reports sampled

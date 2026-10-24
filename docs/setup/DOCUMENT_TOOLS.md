@@ -89,17 +89,3 @@ Buat dokumen di Google Docs berjudul "Rapat" dan isi "Bahas jadwal proyek"
 akun yang terhubung, mengisi teks, lalu membuka tautannya. Belum ada pengeditan
 dokumen Google yang sudah ada atau integrasi Google Sheets. Jika pengisian gagal
 setelah dokumen dibuat, pesan kegagalan menyertakan tautannya agar bisa diperiksa.
-
-## Verifikasi lokal
-
-Bagian ini hanya untuk komputer pengembangan yang memiliki file tes lokal.
-`experiments/*.py` diabaikan Git dan tidak diperlukan untuk menjalankan Ember;
-perintah ini bukan langkah setup untuk hasil clone baru di Pi.
-
-```powershell
-.\venv\Scripts\python.exe -m unittest experiments.test_documents experiments.test_document_routing -v
-```
-
-Tes menggunakan file/database sementara, simulasi peluncuran aplikasi, dan
-simulasi respons Google API. Pengujian Google Docs dengan akun asli dilakukan
-setelah kredensial tersedia dan login selesai.

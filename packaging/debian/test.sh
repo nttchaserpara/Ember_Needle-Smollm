@@ -155,7 +155,7 @@ print(json.dumps({"needle_response_type": result["type"]}))
 result=$(runuser -u emberos-smoke -- env HOME=/home/emberos-smoke \
     EMBER_DATA_DIR=/home/emberos-smoke/.local/share/emberos \
     /opt/emberos/venv/bin/python /opt/emberos/scripts/benchmark_local_llm.py \
-    --direct-tool --document /opt/emberos/experiments/fixtures/sample-summary.txt)
+    --direct-tool)
 printf '%s\n' "$result"
 RESULT_JSON="$result" /opt/emberos/venv/bin/python - <<'PY'
 import json

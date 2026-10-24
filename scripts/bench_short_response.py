@@ -146,6 +146,7 @@ def run_mode(mode, cases, count, sleep_idle, idle_grace):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--cases", type=Path, required=True, help="Path to your local reply cases JSON file")
     parser.add_argument("--mode", choices=("load-per-call", "keep-loaded", "both", "sleep-wake"), default="both")
     parser.add_argument("--n", type=int, default=10, help="Calls per mode; sleep-wake always runs cold, warm, wake")
     parser.add_argument("--sleep-idle", type=int, default=int(os.environ.get("EMBER_LLM_SLEEP_IDLE", 90)))
@@ -156,7 +157,7 @@ def main():
         parser.error("--n, --sleep-idle and --idle-grace must be positive")
     # Load the production router for honest parent RSS; no query is executed.
     import needle_router
-    cases = [case for case in json.loads((ROOT / "experiments/reply_cases.json").read_text(encoding="utf-8")) if case["generate"]]
+    cases = [case for case in json.loads(args.cases.read_text(encoding="utf-8")) if case["generate"]]
     config = LocalTextClient()
     report = {"platform": platform.platform(), "python_version": platform.python_version(),
               "needle_imported": True, "model": str(config.model_path),

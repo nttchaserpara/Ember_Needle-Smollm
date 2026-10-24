@@ -36,10 +36,11 @@ def check_rejected_candidates(cases):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--case", help="Run a single case ID from experiments/reply_cases.json")
+    parser.add_argument("--cases", type=Path, required=True, help="Path to your local reply cases JSON file")
+    parser.add_argument("--case", help="Run a single case ID from the supplied cases file")
     parser.add_argument("--validation-only", action="store_true", help="Replay captured invalid replies without loading SmolLM")
     args = parser.parse_args()
-    cases = json.loads((Path(__file__).resolve().parents[1] / "experiments/reply_cases.json").read_text(encoding="utf-8"))
+    cases = json.loads(args.cases.read_text(encoding="utf-8"))
     if args.case:
         cases = [case for case in cases if case["id"] == args.case]
         if not cases:

@@ -1,5 +1,8 @@
 # Panduan penggunaan terminal Ember
 
+Evaluation commands using `--cases` require your own local JSON cases; replace
+`/path/to/...` with an existing file. Evaluation datasets are not included.
+
 Diperbarui: 17 Oktober 2026. Panduan ini mengikuti kemampuan yang sudah ada,
 termasuk batasan yang masih ditemukan. Semua prompt untuk Ember memakai bahasa
 Inggris. Jalankan satu permintaan, tunggu hasilnya, lalu lanjutkan.
@@ -155,28 +158,6 @@ pasang tambahan berikut sebelum menjalankan Ember lagi:
 
 Jika hanya mencoba `.txt`, cukup jalankan kembali `run_ember.py`.
 
-### Coba file contoh yang sudah ada
-
-Di `You>`, gunakan path relatif berikut ketika Ember dimulai dari root proyek:
-
-```text
-Summarize "experiments/fixtures/sample-summary.txt"
-```
-
-File pendek ini berisi laporan pengujian audio: pengujian Jumat, sepuluh
-pemeriksaan lulus, dan pengujian berikutnya Senin. Isinya tidak perlu dibuat
-atau ditempelkan sebagai beberapa pesan ke Ember.
-
-Untuk mencoba dokumen yang lebih panjang:
-
-```text
-Summarize "experiments/fixtures/pi-long-report.txt"
-```
-
-Ini laporan fiktif untuk menguji proses dan kualitas ringkasan. Hasil generasi
-bisa mencapai batas token dan memakai fallback; belum menjadi contoh kualitas
-ringkasan panjang yang dinyatakan lulus.
-
 ### Coba file milikmu
 
 Ganti path contoh di bawah dengan file yang benar-benar ada:
@@ -190,10 +171,10 @@ Summarize "D:\Downloads\my-document.pdf"
 ```
 
 Path dengan spasi tetap harus berada dalam tanda kutip. Untuk mengambil path
-absolut file contoh di PowerShell, lakukan **sebelum membuka Ember**:
+absolut file milikmu di PowerShell, lakukan **sebelum membuka Ember**:
 
 ```powershell
-(Resolve-Path .\experiments\fixtures\sample-summary.txt).Path
+(Resolve-Path "D:\Downloads\my-report.txt").Path
 ```
 
 Tempel path yang dihasilkan setelah kata `Summarize`, di dalam tanda kutip.
@@ -230,14 +211,15 @@ kembali file tersebut sebelum menghapusnya.
 Jika routing gagal, uji tool secara langsung dari **shell**, setelah `exit`:
 
 ```powershell
-.\venv\Scripts\python.exe scripts/benchmark_local_llm.py --direct-tool --document experiments/fixtures/sample-summary.txt
+.\venv\Scripts\python.exe scripts/benchmark_local_llm.py --direct-tool
 ```
 
+Tanpa `--document`, benchmark membuat dokumen singkat sementara.
 Mode ini benar-benar mencoba summarize, tetapi melewati Needle. RAM-nya tidak
 mewakili keseluruhan agent. Untuk benchmark melalui router:
 
 ```powershell
-.\venv\Scripts\python.exe scripts/benchmark_local_llm.py --document experiments/fixtures/sample-summary.txt
+.\venv\Scripts\python.exe scripts/benchmark_local_llm.py
 ```
 
 Benchmark dokumen ini tidak membuka database percakapan CLI; ia menguji job
@@ -274,7 +256,7 @@ Untuk melihat sampai lima catatan terbaru:
 Setelah mencoba summarize, pencarian judul file juga bisa dicoba:
 
 ```text
-/memory search sample-summary
+/memory search my-report
 ```
 
 Untuk membuktikan penyimpanan bertahan, ketik `exit`, jalankan Ember lagi dengan
@@ -428,7 +410,7 @@ Jika venv sudah siap, langsung jalankan:
 
 Prompt disk, `/memory`, dan file contoh di atas dapat dipakai untuk pengujian
 Pi. File dan pembacaan sistem berasal dari Pi. Path `D:\Downloads\...` milik
-Windows tidak tersedia di Pi; gunakan path relatif fixture atau path Linux
+Windows tidak tersedia di Pi; gunakan path file Linux
 yang benar. Pi masih perlu validasi perangkat; ini belum merupakan port lengkap.
 
 Untuk summarize dengan LLM, **keluar dari Ember dahulu** dan siapkan model:
@@ -452,7 +434,7 @@ venv dan executable Windows tidak dapat digunakan sebagai runtime Linux.
 Untuk benchmark di shell Pi:
 
 ```bash
-./venv/bin/python scripts/benchmark_local_llm.py --document experiments/fixtures/sample-summary.txt
+./venv/bin/python scripts/benchmark_local_llm.py
 ```
 
 Tambahkan `--direct-tool` bila ingin mengisolasi tool dari routing, dengan
@@ -470,11 +452,11 @@ Jika mengalami hasil yang sama, ketik `exit` di Ember, lalu jalankan kedua
 perintah berikut **di shell Pi**, satu per satu:
 
 ```bash
-./venv/bin/python scripts/benchmark_local_llm.py --direct-tool --document experiments/fixtures/sample-summary.txt
+./venv/bin/python scripts/benchmark_local_llm.py --direct-tool
 ```
 
 ```bash
-./venv/bin/python scripts/benchmark_local_llm.py --document experiments/fixtures/sample-summary.txt
+./venv/bin/python scripts/benchmark_local_llm.py
 ```
 
 Perintah pertama menguji tool/runtime tanpa Needle. Perintah kedua merekam
@@ -507,7 +489,7 @@ memerlukan konfirmasi target. Percakapan umum serta pencarian history bahasa
 alami masih terbatas; periksa daftar batasan sebelum mengandalkan tool.
 
 Untuk pengujian ulang setelah pembaruan, coba prompt disk pada bagian 3,
-ringkasan fixture `.txt` pada bagian 4, serta `/memory` pada bagian 5.
+ringkasan file `.txt` milikmu pada bagian 4, serta `/memory` pada bagian 5.
 Di Windows, kontrol volume dan brightness memerlukan perangkat yang mendukung;
 di Pi, gunakan benchmark bagian 7 untuk memisahkan kegagalan routing dari
 kegagalan model. Dukungan `.doc` lama dan OCR masih belum tersedia.
@@ -515,7 +497,7 @@ kegagalan model. Dukungan `.doc` lama dan OCR masih belum tersedia.
 Evaluasi tanpa menjalankan tindakan OS tersedia dari shell Windows:
 
 ```powershell
-.\venv\Scripts\python.exe scripts/evaluate_routing.py --output logs/routing.json
+.\venv\Scripts\python.exe scripts/evaluate_routing.py --cases /path/to/routing-cases.json --output logs/routing.json
 .\venv\Scripts\python.exe scripts/evaluate_memory.py --with-routing --output logs/memory-routing.json
 ```
 
@@ -553,7 +535,7 @@ ke prompt; batasnya dijelaskan dalam [panduan balasan natural](setup/NATURAL_REP
 Untuk pengujian pengembangan pada Pi, jalankan dari **shell**:
 
 ```bash
-./venv/bin/python scripts/evaluate_replies.py --output logs/pi-replies.json
+./venv/bin/python scripts/evaluate_replies.py --cases /path/to/reply-cases.json --output logs/pi-replies.json
 ```
 
 Skrip memakai hasil tool tiruan dan database sementara, tanpa tindakan OS.
@@ -565,8 +547,8 @@ Benchmark worker kini memakai `llama-server` produksi pada kedua mode,
 tanpa membutuhkan `llama-cli` atau mengubah path dalam kode:
 
 ```bash
-./venv/bin/python scripts/bench_short_response.py --mode both --n 10 --output logs/pi-worker-modes.json
-./venv/bin/python scripts/bench_short_response.py --mode sleep-wake --sleep-idle 90 --output logs/pi-sleep-wake.json
+./venv/bin/python scripts/bench_short_response.py --cases /path/to/reply-cases.json --mode both --n 10 --output logs/pi-worker-modes.json
+./venv/bin/python scripts/bench_short_response.py --cases /path/to/reply-cases.json --mode sleep-wake --sleep-idle 90 --output logs/pi-sleep-wake.json
 ```
 
 Mode `sleep-wake` menunggu idle lebih dari 90 detik, mencatat status tidur dan

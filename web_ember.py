@@ -915,7 +915,6 @@ HTML_PAGE = r"""<!DOCTYPE html>
       <button type="button" class="qa-item" onclick="sendPromptFromPanel('show disk space')">Disk Space</button>
       <button type="button" class="qa-item" onclick="sendPromptFromPanel('/memory')">Memory</button>
       <button type="button" class="qa-item" onclick="sendPromptFromPanel('/memory search')">Search History</button>
-      <button type="button" class="qa-item" onclick="sendPromptFromPanel('summarize &quot;experiments/fixtures/sample-summary.txt&quot;')">Summarize Sample</button>
       <button type="button" class="qa-item" onclick="sendPromptFromPanel('find large files')">Large Files</button>
     </div>
   </div>

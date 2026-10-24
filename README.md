@@ -74,9 +74,7 @@ depend on the OS and hardware; actions run on the backend computer.
 
 - [Usage and examples](docs/USAGE.md)
 - [Document tools](docs/setup/DOCUMENT_TOOLS.md), [audio](docs/setup/AUDIO_TOOLS.md), and [undo](docs/setup/UNDO.md)
-- [Development and evaluation](CONTRIBUTING.md)
 
-Source lives in `emberos/` and `use_cases/`; setup and evaluation scripts are
-in `scripts/`. `experiments/` contains only shared evaluation cases and sample
-inputs. Personal notes, runtime data, downloaded models, and build output are
-excluded from Git.
+Source lives in `emberos/` and `use_cases/`; setup scripts are in `scripts/`.
+Personal notes, experiments, runtime data, downloaded models, and build output
+are excluded from Git.
