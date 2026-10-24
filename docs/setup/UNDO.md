@@ -134,7 +134,7 @@ not successful undo tests. Reports: `logs/undo-routing-after.json` and
 
 The measurements above are historical local runs; their raw reports are not
 included in this repository. Use the commands above to measure the current
-checkout and the [review guide](../REVIEW_GUIDE.md) to distinguish regression
+checkout and the [development guide](../../CONTRIBUTING.md) to distinguish regression
 checks from physical-device validation. Failed phrases remain
 positive expectations in the fixture. The negation case additionally requires
 the `no_action` route, rather than merely accepting any result with no execution.

@@ -102,7 +102,7 @@ The supported combinations are `bookworm/arm64`, `bookworm/amd64`,
 repository setup above. For download, TLS, or signing-key errors, resolve the
 reported network/certificate/key issue before installing; do not disable APT
 signature verification. Other OS releases require a compatible published
-package or the [source setup](../../README.md#menjalankan-dari-source).
+package or the [source setup](../../README.md#run-from-source).
 
 ## Check an installed device
 

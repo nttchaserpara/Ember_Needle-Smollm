@@ -1,12 +1,10 @@
-# Pengembangan dan evaluasi
+# Development
 
-[Kembali ke README](README.md) · [Arsitektur](docs/ARCHITECTURE.md)
+Use the project virtual environment and run commands from the repository root.
+On Windows, replace `python` with `.\venv\Scripts\python.exe`; on Linux,
+use `./venv/bin/python`. Install `requirements.txt` first.
 
-Siapkan venv dan `requirements.txt` mengikuti README. Semua perintah di bawah
-dijalankan dari root repo dengan Python venv. Pada PowerShell, ganti `python`
-dengan `.\venv\Scripts\python.exe`; pada Linux gunakan `./venv/bin/python`.
-
-## Regression checks terarah
+## Regression checks
 
 ```bash
 python -m unittest scripts.test_gui_launcher scripts.test_web_discovery -v
@@ -17,58 +15,31 @@ python scripts/test_web_registry_security.py
 python scripts/test_linux_adapters.py
 ```
 
-Checks ini memakai mock dan/atau file sementara untuk memeriksa routing
-tertentu, konfirmasi, registry web, dan adapter. Beberapa mengimpor Needle,
-sehingga komponen native-nya tetap harus tersedia. Ini bukan benchmark kualitas
-model atau bukti bahwa semua perangkat desktop sudah didukung.
+These checks use mocks and/or temporary files. Some still import the native
+Needle engine. Set `EMBER_DATA_DIR` to a disposable directory to isolate logs
+and application data. Companion tests additionally require
+`desktop/companion/requirements.txt`.
 
-Untuk mengisolasi log/data aplikasi selama checks, set `EMBER_DATA_DIR` ke
-folder sementara sebelum menjalankannya, lalu hapus variabel itu dari sesi
-shell setelah selesai. Jangan menunjuk ke database percakapan pribadi.
-
-Tes companion memiliki dependensi tambahan:
-
-```bash
-python -m pip install -r desktop/companion/requirements.txt
-python -m unittest scripts.test_emberos_companion -v
-```
-
-## Evaluasi yang bisa menunjukkan keterbatasan model
+## Evaluation
 
 ```bash
 python scripts/evaluate_memory.py --output logs/memory-content.json
 python scripts/evaluate_routing.py --output logs/routing.json
-python scripts/evaluate_memory.py --with-routing --output logs/memory-routing.json
-```
-
-Evaluasi memory menggunakan database sementara; routing mengevaluasi keputusan
-tanpa mengeksekusi tool nyata. Jangan menganggap exit code nonzero sebagai
-kesalahan instalasi saja: periksa kasus yang gagal. Suite memory memuat kasus
-traceback yang menyingkap keterbatasan relevansi pencarian literal; keberhasilan
-penyimpanan tidak otomatis berarti seluruh kasus recall lulus.
-
-Untuk ringkasan dan pengukuran sumber daya, siapkan model/runtime lalu jalankan:
-
-```bash
 python scripts/benchmark_local_llm.py --document experiments/fixtures/sample-summary.txt
-python scripts/benchmark_local_llm.py --direct-tool --document experiments/fixtures/sample-summary.txt
 ```
 
-`--direct-tool` melewati router sehingga tidak mewakili seluruh alur agent.
-Detail pengukuran ada di [panduan local LLM](docs/setup/LOCAL_LLM.md).
-Skrip smoke lain dapat menjalankan tool nyata; baca opsi dan implementasinya
-sebelum menjalankan semuanya pada komputer pribadi.
+The summary benchmark requires the [local model/runtime](docs/setup/LOCAL_LLM.md).
+Memory evaluation uses a temporary database; routing records proposals without
+executing tools. The memory suite includes a known failing case where traceback
+paths match a discussion topic. Inspect failures instead of counting fallbacks
+or storage success as correct recall. See [memory details](docs/CONVERSATION_MEMORY.md).
 
-## Menyampaikan hasil dan perubahan
+Keep the small JSON cases and sample documents in `experiments/`: evaluation
+scripts, the GUI sample, and package tests reference them. Local ad hoc Python
+experiments and recorded results are ignored by Git.
 
-- Catat commit, platform/arsitektur, versi Python, model/runtime, perintah,
-  exit code, serta jumlah kasus lulus/total.
-- Pisahkan hasil dengan mock, inferensi model, dan uji perangkat fisik.
-- Pertahankan status gagal, unsupported, dan fallback di laporan.
-- Saat menambah tool, selaraskan skema Needle, registry, implementasi platform,
-  serta pembatasan/konfirmasi pada UI yang relevan.
-- Perbarui panduan dan gunakan fixture sintetis; jangan commit data pengguna.
-
-Workflow di [`.github/workflows/debian-packages.yml`](.github/workflows/debian-packages.yml)
-membangun dan menjalankan smoke test paket serta companion. Status build
-tidak menggantikan evaluasi akurasi model atau pengujian langsung di Pi.
+When changing tools, keep Needle schemas, registry implementations, and UI
+confirmation rules consistent. Record the commit, platform, model/runtime,
+command, and pass/fail counts when reporting results. Mock tests do not establish
+model accuracy or Raspberry Pi performance. Keep credentials and user data out
+of commits.

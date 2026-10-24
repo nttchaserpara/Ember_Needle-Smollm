@@ -164,5 +164,5 @@ The full evaluator also runs these checks and reports them under
 `validation_regressions`. It still reports generation coverage separately;
 falling back accurately must not be presented as improved generation quality.
 The measurements above are historical local runs, not a fresh validation of
-every revision. For review scope and reproducible evaluation commands, see the
-[review guide](../REVIEW_GUIDE.md) and [contributor guide](../../CONTRIBUTING.md).
+every revision. For reproducible evaluation commands, see the
+[development guide](../../CONTRIBUTING.md).

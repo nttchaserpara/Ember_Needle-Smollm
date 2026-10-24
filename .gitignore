@@ -28,6 +28,7 @@ runtimes/
 # Keep small input fixtures and routing cases for on-device benchmarks.
 /experiments/*.py
 /experiments/results/
+/experiments/fixtures/random-story.txt
 
 # Temporary files, editor state, and test caches.
 /tmp/
