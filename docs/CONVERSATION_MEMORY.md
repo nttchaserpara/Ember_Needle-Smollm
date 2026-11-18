@@ -278,21 +278,26 @@ swap change, and no remaining child processes. This measurement is from the
 Linux x86-64 development environment; it is not a Raspberry Pi result. The
 existing 16 recall and routing checks also passed.
 
-On the Raspberry Pi Zero 2 W, both runs of that same synthetic request failed
-at the baseline revision and passed at the revision with disk comparison.
+On the Raspberry Pi Zero 2 W, all three runs of the same synthetic request
+failed at the baseline revision and passed with the disk comparison workflow.
 
-| Run | Revision | Comparison | Request (s) | Full evaluator process (s) | Sampled peak process tree RSS (MiB) | Minimum system RAM available (MiB) |
-| ---: | --- | --- | ---: | ---: | ---: | ---: |
-| 1 | Before (`538e630`) | FAIL | 23.0043 | 124.435 | 52.75 | 243.00 |
-| 1 | After (`4a98854`) | PASS | 0.0257 | 102.756 | 47.82 | 246.48 |
-| 2 | Before (`538e630`) | FAIL | 22.8975 | 124.990 | 52.74 | 243.21 |
-| 2 | After (`4a98854`) | PASS | 0.0244 | 102.968 | 47.82 | 246.32 |
+| Run | Revision | Comparison | Request (s) | Full evaluator process (s) | Sampled peak process tree RSS (MiB) | Minimum system RAM available (MiB) | Swap delta (MiB) | Children remaining |
+| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | Before (`538e630`) | FAIL | 23.0043 | 124.435 | 52.75 | 243.00 | 0 | 0 |
+| 1 | After (`4a98854`) | PASS | 0.0257 | 102.756 | 47.82 | 246.48 | 0 | 0 |
+| 2 | Before (`538e630`) | FAIL | 22.8975 | 124.990 | 52.74 | 243.21 | 0 | 0 |
+| 2 | After (`4a98854`) | PASS | 0.0244 | 102.968 | 47.82 | 246.32 | 0 | 0 |
+| 3 | Before (`538e630`) | FAIL | 22.7119 | 124.396 | 52.77 | 241.58 | 0 | 0 |
+| 3 | After (`a2b75e4`) | PASS | 0.0223 | 102.785 | 47.54 | 243.56 | 0 | 0 |
 
-All four measurements reported a system swap delta of 0 MiB and no observed
-children remaining. Request time covers the call to `handle_request` with the
-registry and synthetic history already initialized. The full process includes
-setup and teardown. Both terminal summaries are recorded here. The two runs
-used the same output path, so the JSON file on the Pi contains the second run.
+Request time covers the call to `handle_request` with the registry and
+synthetic history already initialized. The full process includes setup and
+teardown. The `538e630` revision predates this workflow, so these runs measure
+the end-to-end feature against its absent baseline; they are not a direct
+regression comparison between `4a98854` and `a2b75e4`. Each pair reported zero
+swap change and no observed child processes. Runs 1 and 2 used the same output
+path; the latest Pi report is saved as
+`~/emberos-baseline/disk-comparison-agents.json`.
 
 ### Relevance baseline for notes and conversation history
 
