@@ -10,6 +10,7 @@ import sqlite3
 from uuid import uuid4
 
 from emberos.outcomes import ToolOutput
+from emberos.retrieval import relevance, words
 
 
 MAX_TURNS = 1000
@@ -20,17 +21,7 @@ MAX_REPLY_HISTORY_REQUEST = 200
 MAX_REPLY_HISTORY_RESPONSE = 300
 HISTORY_SCOPES = {"all": "all saved sessions", "current_session": "the current session",
                   "previous_session": "the previous saved session"}
-_ASCII_WORD_SEPARATORS = str.maketrans({chr(code): " " for code in range(128)
-                                      if not chr(code).isalnum()})
 _FRAME_DIRECTORIES = re.compile(r'^([ \t]*File ")[^"\r\n]*[/\\](?=[^"/\\\r\n]+", line \d+\b)', re.MULTILINE)
-
-
-def _words(text):
-    """Whole-word lookup tokens only; this never classifies user intent."""
-    text = text.casefold()
-    if text.isascii():
-        return set(text.translate(_ASCII_WORD_SEPARATORS).split())
-    return set("".join(char if char.isalnum() else " " for char in text).split())
 
 
 def _clip(value, limit):
@@ -155,7 +146,7 @@ class ConversationMemory:
             raise ValueError("Unknown conversation history scope")
         if len(query) > 512:
             raise ValueError("Search topics must be at most 512 characters")
-        terms = _words(query)
+        terms = words(query)
         if query.strip() and not terms:
             return []
         fields = "id, session_id, created_at, request, response, route, tool, arguments_json, status, success, truncated"
@@ -179,20 +170,17 @@ class ConversationMemory:
             # Stream the bounded store; retain only five candidates, rather
             # than loading the database or adding an embedding model/index.
             for row in db.execute(f"SELECT {fields} FROM turns WHERE {where} ORDER BY id DESC", parameters):
-                score = (True, 0, 0, row["id"])
+                score = (True, 0, row["id"])
                 if terms:
                     # Keep the filename and surrounding diagnostic text searchable.
-                    request = _words(_FRAME_DIRECTORIES.sub(r"\1", row["request"]))
+                    request = _FRAME_DIRECTORIES.sub(r"\1", row["request"])
                     # Failure output can contain traceback paths and boilerplate
                     # unrelated to the subject. Retrieve failures by their inputs.
                     failed = row["success"] == 0 or row["status"] in {"error", "unsupported"}
-                    answer = set() if failed else _words(row["response"])
-                    arguments = _words(row["arguments_json"])
-                    if not terms <= request | answer | arguments:
+                    rank = relevance(terms, request, row["arguments_json"], "" if failed else row["response"])
+                    if not rank:
                         continue
-                    # Prefer reported results over matching failed attempts,
-                    # preserving failure labels in displayed excerpts.
-                    score = (not failed, len(terms & request), len(terms & arguments), row["id"])
+                    score = (not failed, rank, row["id"])
                 identity = (row["request"], row["response"], row["status"])
                 if any(candidate[1] == identity for candidate in best):
                     continue

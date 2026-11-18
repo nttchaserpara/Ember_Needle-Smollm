@@ -59,8 +59,11 @@ the menus restores independent input handling; it does not solve semantic
 retrieval. Use `/memory` and `/memory search <topic>` for direct access to the
 stored history while model-based conversation handling is evaluated separately.
 
-Lookup is literal: every topic word must match a whole word in a saved request,
-answer, or arguments. Matching results precede failed attempts, with duplicate
+Topic lookup matches case-folded whole words across the request, answer and
+arguments. One- and two-word queries require all terms. Longer queries require
+at least two thirds of the distinct terms. Coverage takes priority within each
+success group, followed by field weights and the concentration of query terms in
+the request. Matching results precede failed attempts, with duplicate
 excerpts suppressed. Failed response text is excluded from matching; failures
 remain searchable by their request/arguments and retain their original status.
 A no-match result never falls back to unrelated recent history. For a Python
@@ -285,3 +288,43 @@ searches ranked a poster discussion ahead of storage information. The notes
 query `deadline scholarship` missed the note titled “Scholarship deadline.”
 The evaluator writes its JSON report before exiting with code 1 when any
 check fails.
+
+The Pi reproduced the baseline with 7/13 checks, P@5 of 0.218, MRR@5 of
+0.545, Recall@5 of 0.636 and zero out-of-scope hits.
+
+### Field-weighted lexical ranking
+
+Notes and conversation history share a whole-word scoring function. Matches
+in a note title or conversation request receive weight 4, tags or tool
+arguments receive weight 2, and note contents or conversation answers receive
+weight 1. When scores tie, the higher record ID comes first. The existing session, error-output, and traceback
+filters still apply to conversation history.
+
+Notes use an on-disk SQLite FTS5 index to find candidates for ASCII queries
+with at most 64 distinct terms. Existing notes are indexed when first opened
+with this version. SQLite triggers maintain the derived index transactionally
+on inserts, updates, deletes and undo. On SQLite builds without FTS5, notes
+are scored directly from the source table; reopening with FTS5 rebuilds the
+index after such writes. Note search retains the older substring lookup when
+there are no ranked matches. History continues to scan its bounded store.
+
+| Same 13-query fixture | First-hit or empty checks | P@5 | MRR@5 | Recall@5 | Scope leaks |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Baseline on Pi | 7/13 | 0.218 | 0.545 | 0.636 | 0 |
+| Updated ranking on Linux x86-64 | 11/13 | 0.273 | 0.864 | 0.909 | 0 |
+
+For both sources, storage records now precede the poster for `disk space`.
+The ambiguous notes query `backup` still ranks a capacity note ahead of the
+restore checklist. The history query `grant due date` still returns no match.
+Both expected-empty queries remain empty. These results cover a small English
+fixture. To measure the updated version on the Pi, compare both revisions in
+fresh processes with the same evaluator:
+
+```sh
+./venv/bin/python scripts/benchmark_retrieval.py --output ~/emberos-baseline/retrieval-ranking-comparison.json
+```
+
+The resource figures cover the full evaluator, including database creation,
+exports, index setup and report writing. The separate regression script
+`scripts/test_retrieval_ranking.py` exercises a battery-voltage topic,
+session isolation, legacy note migration and index updates.

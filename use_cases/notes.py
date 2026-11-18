@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from emberos.config import ROOT_DIR, data_dir
+from emberos.retrieval import relevance, words
 
 logger = logging.getLogger("emberos.use_cases.notes")
 
@@ -27,6 +28,34 @@ class NotesManager:
         self._conn = sqlite3.connect(str(path), check_same_thread=False)
         self._lock = threading.Lock()
         self._create_table()
+        self._indexed = self._prepare_search_index()
+
+    def _prepare_search_index(self):
+        """Atomically backfill existing notes and keep the derived index in sync."""
+        db = self._conn
+        available = any(row[0] == "fts5" for row in db.execute("PRAGMA module_list"))
+        insert = ("INSERT INTO notes_fts(rowid,title,tags,content) "
+                  "VALUES(new.id,new.title,new.tags,new.content);")
+        remove = ("INSERT INTO notes_fts(notes_fts,rowid,title,tags,content) "
+                  "VALUES('delete',old.id,old.title,old.tags,old.content);")
+        triggers = {"insert": insert, "update": remove + insert, "delete": remove}
+        with db:
+            db.execute("BEGIN IMMEDIATE")
+            if not available:
+                # A DB can move between SQLite builds. Let source writes continue
+                # here and rebuild when it returns to a build with FTS5.
+                for event in triggers:
+                    db.execute(f"DROP TRIGGER IF EXISTS notes_fts_{event}")
+                return False
+            existing = {row[0] for row in db.execute(
+                "SELECT name FROM sqlite_master WHERE type IN ('table','trigger') AND name GLOB 'notes_fts*'")}
+            db.execute("CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5("
+                       "title,tags,content,content=notes,content_rowid=id)")
+            if "notes_fts" not in existing or any(f"notes_fts_{event}" not in existing for event in triggers):
+                db.execute("INSERT INTO notes_fts(notes_fts) VALUES('rebuild')")
+            for event, body in triggers.items():
+                db.execute(f"CREATE TRIGGER IF NOT EXISTS notes_fts_{event} AFTER {event} ON notes BEGIN {body} END")
+        return True
 
     def _create_table(self):
         self._conn.execute("""
@@ -58,6 +87,24 @@ class NotesManager:
         # search instead of returning notes that no longer exist on disk.
         self.prune_missing_exports()
         with self._lock:
+            terms = words(query)
+            if terms:
+                self._conn.create_function("note_score", 3,
+                                           lambda title, tags, body: relevance(terms, title, tags or "", body))
+                candidates = ""
+                params = []
+                if self._indexed and len(terms) <= 64 and query.isascii():
+                    candidates = "id IN (SELECT rowid FROM notes_fts WHERE notes_fts MATCH ?) AND "
+                    params.append(" OR ".join(f'"{word}"' for word in sorted(terms)))
+                rows = self._conn.execute(
+                    "SELECT id,title,content,timestamp,tags,note_score(title,tags,content) AS score "
+                    f"FROM notes WHERE {candidates}score > 0 ORDER BY score DESC,id DESC LIMIT ?",
+                    [*params, limit],
+                ).fetchall()
+                if rows:
+                    return [self._row_to_dict(row[:5]) for row in rows]
+            # Keep legacy substring lookup for fragments with no lexical hits,
+            # and retain the existing empty-query listing.
             rows = self._conn.execute(
                 "SELECT id, title, content, timestamp, tags FROM notes "
                 "WHERE content LIKE ? OR title LIKE ? OR tags LIKE ? "
@@ -75,11 +122,13 @@ class NotesManager:
             return []
         try:
             with self._lock:
-                rows = self._conn.execute(
-                    "SELECT id, title, content, timestamp, tags FROM notes"
-                ).fetchall()
-            notes = [self._row_to_dict(row) for row in rows]
-            stale = [note for note in notes if not self._has_export(note)]
+                stale = []
+                for note_id, title in self._conn.execute("SELECT id, title FROM notes"):
+                    if not self._has_export({"id": note_id, "title": title}):
+                        row = self._conn.execute(
+                            "SELECT id, title, content, timestamp, tags FROM notes WHERE id = ?", (note_id,)
+                        ).fetchone()
+                        stale.append(self._row_to_dict(row))
         except OSError:
             return []
         if not stale:
