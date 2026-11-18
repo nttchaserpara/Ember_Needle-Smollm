@@ -247,3 +247,41 @@ children remaining. Request time covers the call to `handle_request` with the
 registry and synthetic history already initialized. The full process includes
 setup and teardown. Both terminal summaries are recorded here. The two runs
 used the same output path, so the JSON file on the Pi contains the second run.
+
+### Relevance baseline for notes and conversation history
+
+From the repository root, run:
+
+```sh
+python3 scripts/evaluate_retrieval.py --output ~/emberos-baseline/retrieval-ranking-before.json
+```
+
+The evaluator sends 13 English queries to the existing search methods and
+compares their first five results against hand-labeled records. It creates
+nine notes with text exports and eight conversation turns across three sessions
+in a temporary directory. Notes and history are searched independently.
+The report lists the intended information need, scope, relevant records and
+actual ranking for every query. Short queries such as `backup` can have
+several interpretations; the fixture labels the data-restoration intent.
+
+For the 11 queries with relevant records, Precision@5 is the number of
+relevant hits divided by five, including unfilled positions. MRR@5 averages
+the reciprocal rank of the first relevant hit, using zero for a miss.
+Recall@5 measures the fraction of all labeled relevant records retrieved.
+The two queries with no relevant records are scored separately for an empty
+response. A case passes when the first hit is relevant or an expected empty
+response is empty, and all returned records respect the requested scope.
+
+| Local baseline | Queries with relevant records | Precision@5 | MRR@5 | Recall@5 |
+| --- | ---: | ---: | ---: | ---: |
+| Notes | 6 | 0.167 | 0.417 | 0.500 |
+| History | 5 | 0.280 | 0.700 | 0.800 |
+| All | 11 | 0.218 | 0.545 | 0.636 |
+
+Two fresh local runs of the implementation at `dc68b77` produced identical
+rankings. Seven of 13 first-hit or empty-result checks passed, including both
+empty results. No out-of-scope history was returned. For `disk space`, both
+searches ranked a poster discussion ahead of storage information. The notes
+query `deadline scholarship` missed the note titled “Scholarship deadline.”
+The evaluator writes its JSON report before exiting with code 1 when any
+check fails.
