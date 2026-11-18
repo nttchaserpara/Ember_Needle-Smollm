@@ -1,0 +1,26 @@
+{
+  "language": "English",
+  "cases": [
+    {"query":"Which documents did we talk about last time?","type":"history","expected":{"query":"documents","scope":"previous_session"}},
+    {"query":"What did we talk about documents in the previous session?","type":"history","expected":{"query":"documents","scope":"previous_session"}},
+    {"query":"Could you show the messages about disk space?","type":"history","expected":{"query":"disk space","scope":"all"}},
+    {"query":"What did we discuss about RAM?","type":"history","expected":{"query":"RAM","scope":"all"}},
+    {"query":"What did we discuss about my pending tasks?","type":"history","expected":{"query":"pending tasks","scope":"all"}},
+    {"query":"Show my recent conversations.","type":"history","expected":{"query":"","scope":"all"}},
+    {"query":"Can you list our chats about tasks in this session?","type":"history","expected":{"query":"tasks","scope":"current_session"}},
+    {"query":"Which tasks did we discuss last time?","type":"history","expected":{"query":"tasks","scope":"previous_session"}},
+    {"query":"How much free disk space do I have?","type":"other"},
+    {"query":"How much RAM is installed?","type":"other"},
+    {"query":"List my pending tasks.","type":"other"},
+    {"query":"Show the files in my Documents folder.","type":"other"},
+    {"query":"Search my notes for RAM.","type":"other"},
+    {"query":"What is my CPU temperature?","type":"other"},
+    {"query":"Show it.","type":"other"},
+    {"query":"Don't show my recent conversations.","type":"abstain","expected_reason":"negated_request"},
+    {"query":"What did we discuss about RAM and then check current RAM?","type":"abstain","expected_reason":"uncertain_history_request"},
+    {"query":"What did we discuss about?","type":"abstain","expected_reason":"uncertain_history_request"},
+    {"query":"Show our messages from yesterday.","type":"abstain","expected_reason":"uncertain_history_request"},
+    {"query":"What did we discuss about RAM and delete a file?","type":"abstain","expected_reason":"uncertain_history_request"},
+    {"query":"Tampilkan percakapan tentang RAM.","type":"other"}
+  ]
+}

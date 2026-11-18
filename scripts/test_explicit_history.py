@@ -1,6 +1,7 @@
 """Exercise explicit recall, session scope and abstention through both registries."""
 
 from pathlib import Path
+import json
 import sys
 import tempfile
 from unittest.mock import patch
@@ -15,8 +16,10 @@ from web_ember import WebSafeToolRegistry
 
 
 def main():
-    for query in ("disk space", "How much free disk space do I have?", "List my pending tasks"):
-        assert explicit_history_arguments(query) is None, query
+    fixture = json.loads((Path(__file__).parent / "fixtures/history_language_en.json").read_text())
+    for case in fixture["cases"]:
+        if case["type"] == "other":
+            assert explicit_history_arguments(case["query"]) is None, case["query"]
 
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / "history.sqlite3"
@@ -29,25 +32,29 @@ def main():
             registry = registry_type(memory=current)
             with patch("emberos.history_routing.select_history", side_effect=AssertionError), \
                  patch("needle_router.needle_agent.complete", side_effect=AssertionError):
+                history_cases = [case for case in fixture["cases"] if case["type"] == "history"]
+                for case in history_cases:
+                    result = route_and_execute(case["query"], registry)
+                    assert result["tool"] == "search_conversation_history", result
+                    assert result["arguments"] == case["expected"], result
+
                 for query, scope, answer, excluded in (
                     ("Which budgets did we discuss last time?", "previous_session", "Old plan", "New plan"),
                     ("Can you list our chats about budgets in this session?", "current_session", "New plan", "Old plan"),
                 ):
                     result = route_and_execute(query, registry)
-                    assert result["tool"] == "search_conversation_history", result
                     assert result["arguments"] == {"scope": scope, "query": "budgets"}, result
                     assert answer in result["result"] and excluded not in result["result"], result
 
                 with patch.object(registry, "execute_tool", side_effect=AssertionError):
-                    for query, reason in (
-                        ("Don't show my recent conversations.", "negated_request"),
-                        ("What did we discuss about budgets and then check disk space?", "uncertain_history_request"),
-                        ("Show our conversations from yesterday", "uncertain_history_request"),
-                        ("What did we discuss about?", "uncertain_history_request"),
-                    ):
-                        assert route_and_execute(query, registry)["reason"] == reason, query
+                    for case in fixture["cases"]:
+                        if case["type"] != "abstain":
+                            continue
+                        result = route_and_execute(case["query"], registry)
+                        assert result["reason"] == case["expected_reason"], result
                     registry.memory = None
-                    assert route_and_execute("What did we discuss about RAM?", registry)["reason"] == "memory_unavailable"
+                    result = route_and_execute("What did we discuss about RAM?", registry)
+                    assert result["reason"] == "memory_unavailable", result
 
     print("PASS explicit history scope, abstention, disabled memory and live-query boundaries")
 

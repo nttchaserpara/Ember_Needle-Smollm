@@ -187,6 +187,29 @@ To repeat the baseline method on the Pi and keep the original reports:
 ./venv/bin/python scripts/benchmark_memory_routing.py --output ~/emberos-baseline/routing-after.json
 ```
 
+### English history-intent and slot fixture
+
+The small labeled corpus `scripts/fixtures/history_language_en.json` has 21
+queries: eight history requests, eight other requests, and five requests that
+should abstain and ask for clarification. It covers extracted topic and
+session scope, including direct live-data requests and negated or compound
+history requests. `scripts/evaluate_history_language.py` scores the bounded
+history parser without invoking a model or tools. On Linux x86-64 it passed
+21/21 cases: route accuracy 1.000, history-slot exact match 1.000, safe
+non-history rate 1.000, and zero false history routes. These are parser-fixture
+scores; they do not measure the Needle model's general language understanding.
+
+`scripts/test_explicit_history.py` additionally sends the history and
+abstention examples through both tool registries, checks live-query boundaries,
+and verifies previous/current-session isolation.
+
+Run the corpus and integration checks on the Pi with:
+
+```sh
+./venv/bin/python scripts/evaluate_history_language.py --output ~/emberos-baseline/history-language.json
+./venv/bin/python scripts/test_explicit_history.py
+```
+
 ### Compare a saved disk report with a current reading
 
 In the CLI or web chat, ask `How much free disk space do I have?` to save a
@@ -410,14 +433,15 @@ clearer `restore backup`. I also added small funding and deadline term groups,
 so `grant due date` can match a saved scholarship deadline when the request
 and result support it.
 
-| Linux x86-64, corrected label | Before (`9d92867`) | After, local worktree |
+| Linux x86-64, corrected label | Before (`9d92867`) | After (`a02ec95`) |
 | --- | ---: | ---: |
 | Original, 13 queries | 12/13, P@5 0.273, MRR@5 0.909, Recall@5 0.909 | 13/13, P@5 0.291, MRR@5 1.000, Recall@5 1.000 |
 | Transfer, 12 queries | 12/12, P@5 0.222, MRR@5 1.000, Recall@5 1.000 | 12/12, P@5 0.222, MRR@5 1.000, Recall@5 1.000 |
 
 All five expected-empty queries stayed empty and the requested session scopes
 had no leaks. Sampled peak RSS was 18.16 MiB before and 18.17 MiB after for
-the transfer set. The current changes still need their Pi measurement.
+the transfer set. The Pi results below confirm the same relevance scores on
+the target device.
 
 The Pi completed both sets with the corrected query and funding terms:
 
@@ -434,12 +458,12 @@ The corrected original suite now passes every case on the Pi. Peak RSS rose
 
 Measure the funding and deadline term groups on the Pi with:
 
-\`\`\`sh
+```sh
 for suite in original transfer; do
-  ./venv/bin/python scripts/benchmark_retrieval.py --baseline 9d92867 --suite "$suite" \\
+  ./venv/bin/python scripts/benchmark_retrieval.py --baseline 9d92867 --suite "$suite" \
     --output "$HOME/emberos-baseline/retrieval-funding-$suite.json" || break
 done
-\`\`\`
+```
 
 ### Ranking on additional topics
 
