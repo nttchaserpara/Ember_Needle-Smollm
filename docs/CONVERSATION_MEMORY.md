@@ -297,11 +297,12 @@ The Pi reproduced the baseline with 7/13 checks, P@5 of 0.218, MRR@5 of
 Notes and conversation history share a whole-word scoring function. Matches
 in a note title or conversation request receive weight 4, tags or tool
 arguments receive weight 2, and note contents or conversation answers receive
-weight 1. When scores tie, the higher record ID comes first. The existing session, error-output, and traceback
-filters still apply to conversation history.
+weight 1. When scores tie, the higher record ID comes first. The existing
+session, error-output, and traceback filters still apply to conversation
+history.
 
 Notes use an on-disk SQLite FTS5 index to find candidates for ASCII queries
-with at most 64 distinct terms. Existing notes are indexed when first opened
+with at most 128 expanded terms. Existing notes are indexed when first opened
 with this version. SQLite triggers maintain the derived index transactionally
 on inserts, updates, deletes and undo. On SQLite builds without FTS5, notes
 are scored directly from the source table; reopening with FTS5 rebuilds the
@@ -337,6 +338,59 @@ revision. Its report is saved at `~/emberos-baseline/retrieval-ranking-compariso
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Before (`1fd1ddc`) | 15.65 | 269.12 | 0 | 0.926 | 0 |
 | After (`62e15ad`) | 15.87 | 269.38 | 0 | 0.977 | 0 |
+
+The Pi reran both suites after excluding mural styling mentions:
+
+| Suite | Revision | Checks | P@5 | MRR@5 | Recall@5 | Peak RSS (MiB) | Minimum available (MiB) | Swap (MiB) | Duration (s) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Original, 13 queries | Before (`62e15ad`) | 11/13 | 0.273 | 0.864 | 0.909 | 15.89 | 259.22 | 0 | 0.999 |
+| Original, 13 queries | After (`14346cc`) | 11/13 | 0.273 | 0.864 | 0.909 | 15.86 | 260.79 | 0 | 0.972 |
+| Transfer, 12 queries | Before (`62e15ad`) | 9/12 | 0.178 | 0.778 | 0.778 | 15.90 | 261.35 | 0 | 0.871 |
+| Transfer, 12 queries | After (`14346cc`) | 10/12 | 0.178 | 0.778 | 0.778 | 15.87 | 262.99 | 0 | 0.860 |
+
+All four runs observed no child process remaining. The original suite retained
+its quality scores. The updated transfer suite returned the expected empty
+result for all three negative cases.
+
+On the Pi, the mural filter left the original suite at 11/13. On the transfer
+suite, it raised the first relevant result from 9/12 to 10/12 and changed the
+empty-result check from 2/3 to 3/3. Scores were P@5 0.178, MRR@5 0.778 and
+Recall@5 0.778 in both transfer runs. Peak RSS was 15.90 MiB or less and the
+swap delta was 0 MiB.
+
+### Small synonym groups for topic retrieval
+
+A few bounded English term groups cover ceramics, water management and
+recurring schedules. Retrieval treats “pottery oven” as evidence to look for
+clay and kiln terms. It treats “irrigation routine” as a watering schedule.
+For a saved answer such as “every Tuesday”, the schedule concept is added only
+when the text explicitly says “every” followed by a weekday. Notes search
+expands those terms before its FTS5 candidate lookup. Conversation search
+applies the same normalized terms after filtering by session.
+
+The regression test checks both paraphrases, verifies that a one-time mention
+of Tuesday does not count as a routine, and retains the scoped history and
+index migration checks.
+
+| Linux x86-64 comparison to `14346cc` | Original, 13 queries | Transfer, 12 queries |
+| --- | ---: | ---: |
+| Before | 11/13, P@5 0.273, MRR@5 0.864, Recall@5 0.909 | 10/12, P@5 0.178, MRR@5 0.778, Recall@5 0.778 |
+| With synonym groups | 11/13, P@5 0.273, MRR@5 0.864, Recall@5 0.909 | 12/12, P@5 0.222, MRR@5 1.000, Recall@5 1.000 |
+
+All six expected-empty checks across both suites remained empty. Scope leaks
+remained at zero. In the synthetic evaluator, sampled peak RSS changed from
+18.11 to 18.16 MiB for the original suite and from 18.15 to 18.12 MiB for the
+transfer suite. The updated transfer run took 0.302 seconds. Device results
+for the synonym change are pending.
+
+Run both comparable Pi suites after pulling the change:
+
+```sh
+for suite in original transfer; do
+  ./venv/bin/python scripts/benchmark_retrieval.py --baseline 14346cc --suite "$suite" \
+    --output "$HOME/emberos-baseline/retrieval-synonyms-$suite.json" || break
+done
+```
 
 ### Ranking on additional topics
 

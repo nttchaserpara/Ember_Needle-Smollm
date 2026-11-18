@@ -9,10 +9,32 @@ _STYLE_INSTRUCTION = re.compile(
     r"(?:use|choose|approve|change|increase|decrease|adjust|keep)\s+"
     r"(?:[a-z-]+\s+){0,5}[a-z-]+[.!]?", re.I,
 )
+_ALIASES = {
+    "ceramic": frozenset({"ceramic", "ceramics", "potter", "pottery", "clay"}),
+    "kiln": frozenset({"kiln", "oven"}),
+    "watering": frozenset({"irrigate", "irrigation", "water", "watering"}),
+    "schedule": frozenset({"calendar", "routine", "schedule"}),
+}
+_ALIAS_OWNER = {word: concept for concept, values in _ALIASES.items() for word in values}
+_WEEKLY_ROUTINE = re.compile(
+    r"\bevery\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", re.I
+)
 
 
 def words(text):
     return set(re.findall(r"[^\W_]+", text.casefold()))
+
+
+def normalized_words(text):
+    tokens = words(text)
+    result = {_ALIAS_OWNER.get(token, token) for token in tokens}
+    if _WEEKLY_ROUTINE.search(text):
+        result.add("schedule")
+    return result
+
+
+def candidate_words(terms):
+    return set().union(*(_ALIASES.get(term, {term}) for term in terms))
 
 
 def incidental_visual_reference(terms, request, arguments, answer):
@@ -31,9 +53,9 @@ def incidental_visual_reference(terms, request, arguments, answer):
 
 def relevance(terms, primary, secondary, body):
     """Favor term coverage, then field importance and density within the primary field."""
-    title = words(primary)
-    tags = words(secondary)
-    content = words(body)
+    title = normalized_words(primary)
+    tags = normalized_words(secondary)
+    content = normalized_words(body)
     covered = len(terms & (title | tags | content))
     # Require all terms for short queries and at least two thirds otherwise.
     if not covered or covered * 3 < len(terms) * 2:

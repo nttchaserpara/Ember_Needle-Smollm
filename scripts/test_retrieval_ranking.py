@@ -30,9 +30,12 @@ def main():
             notes.export_text(original)
             aside = notes.add("Lecture layout", "Use battery voltage as the example.", ["slides"])
             notes.export_text(aside)
+            pottery = notes.add("Kiln firing schedule", "Heat the clay tiles on Monday.", ["ceramics"])
+            notes.export_text(pottery)
 
             assert ids(notes, "voltage battery") == [7, aside["id"]]
             assert ids(notes, "electronics") == [7]
+            assert ids(notes, "pottery oven") == [pottery["id"]]
             assert notes.get_by_id(7) == original
             if notes._indexed:
                 # Simulate a build without FTS5 by hiding its module listing.
@@ -74,6 +77,11 @@ def main():
         assert [r["response"] for r in art.search("fire drill")] == ["The fire drill starts at noon."]
         art.record("Read the ferry timetable", "The first sailing is at 07:20.", {"status": "success"})
         assert art.search("ferry timetable")[0]["response"] == "The first sailing is at 07:20."
+        recurring = ConversationMemory(root / "routine.db")
+        recurring.record("Review greenhouse watering", "Water the seedlings every Tuesday.", {"status": "success"})
+        assert recurring.search("irrigation routine")[0]["response"] == "Water the seedlings every Tuesday."
+        recurring.record("Inspect the pump", "The maintenance happened Tuesday.", {"status": "success"})
+        assert len(recurring.search("irrigation routine")) == 1
         art.record("Read the ferry timetable poster", "First sailing at 07:20. Use blue ink.", {"status": "success"})
         assert len(art.search("ferry timetable")) == 2
     print("PASS new topics, session isolation, legacy rows, updates, delete and restore")

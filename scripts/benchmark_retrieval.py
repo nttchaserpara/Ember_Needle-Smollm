@@ -21,14 +21,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--suite", choices=("original", "transfer"), default="original")
-    parser.add_argument("--baseline", choices=(BASELINE, "62e15ad"), default=BASELINE,
+    parser.add_argument("--baseline", choices=(BASELINE, "62e15ad", "14346cc"), default=BASELINE,
                         help="Compare against original retrieval or the first field-weighted ranker")
     args = parser.parse_args()
     runs = {}
     with tempfile.TemporaryDirectory(prefix="ember-ranking-bench-") as tmp:
         root = Path(tmp)
         before = root / "baseline"
-        files = FILES + (["emberos/retrieval.py"] if args.baseline == "62e15ad" else [])
+        files = FILES + (["emberos/retrieval.py"] if args.baseline in {"62e15ad", "14346cc"} else [])
         for name in files:
             target = before / name
             target.parent.mkdir(parents=True, exist_ok=True)

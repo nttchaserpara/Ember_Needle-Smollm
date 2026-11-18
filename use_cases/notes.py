@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from emberos.config import ROOT_DIR, data_dir
-from emberos.retrieval import relevance, words
+from emberos.retrieval import candidate_words, normalized_words, relevance, words
 
 logger = logging.getLogger("emberos.use_cases.notes")
 
@@ -87,15 +87,16 @@ class NotesManager:
         # search instead of returning notes that no longer exist on disk.
         self.prune_missing_exports()
         with self._lock:
-            terms = words(query)
+            terms = normalized_words(query)
             if terms:
                 self._conn.create_function("note_score", 3,
                                            lambda title, tags, body: relevance(terms, title, tags or "", body))
                 candidates = ""
                 params = []
-                if self._indexed and len(terms) <= 64 and query.isascii():
+                candidates_words = candidate_words(terms)
+                if self._indexed and len(candidates_words) <= 128 and query.isascii():
                     candidates = "id IN (SELECT rowid FROM notes_fts WHERE notes_fts MATCH ?) AND "
-                    params.append(" OR ".join(f'"{word}"' for word in sorted(terms)))
+                    params.append(" OR ".join(f'"{word}"' for word in sorted(candidates_words)))
                 rows = self._conn.execute(
                     "SELECT id,title,content,timestamp,tags,note_score(title,tags,content) AS score "
                     f"FROM notes WHERE {candidates}score > 0 ORDER BY score DESC,id DESC LIMIT ?",

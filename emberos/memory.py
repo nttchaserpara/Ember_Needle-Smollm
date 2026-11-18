@@ -10,7 +10,7 @@ import sqlite3
 from uuid import uuid4
 
 from emberos.outcomes import ToolOutput
-from emberos.retrieval import incidental_visual_reference, relevance, words
+from emberos.retrieval import incidental_visual_reference, normalized_words, relevance, words
 
 
 MAX_TURNS = 1000
@@ -146,7 +146,8 @@ class ConversationMemory:
             raise ValueError("Unknown conversation history scope")
         if len(query) > 512:
             raise ValueError("Search topics must be at most 512 characters")
-        terms = words(query)
+        query_terms = words(query)
+        terms = normalized_words(query)
         if query.strip() and not terms:
             return []
         fields = "id, session_id, created_at, request, response, route, tool, arguments_json, status, success, truncated"
@@ -180,7 +181,7 @@ class ConversationMemory:
                     rank = relevance(terms, request, row["arguments_json"], "" if failed else row["response"])
                     if not rank:
                         continue
-                    if not failed and incidental_visual_reference(terms, request, row["arguments_json"], row["response"]):
+                    if not failed and incidental_visual_reference(query_terms, request, row["arguments_json"], row["response"]):
                         continue
                     score = (not failed, rank, row["id"])
                 identity = (row["request"], row["response"], row["status"])
