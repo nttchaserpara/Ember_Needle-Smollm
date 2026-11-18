@@ -419,6 +419,19 @@ All five expected-empty queries stayed empty and the requested session scopes
 had no leaks. Sampled peak RSS was 18.16 MiB before and 18.17 MiB after for
 the transfer set. The current changes still need their Pi measurement.
 
+The Pi completed both sets with the corrected query and funding terms:
+
+| Suite | Revision | Checks | P@5 | MRR@5 | Recall@5 | Peak RSS (MiB) | Minimum available (MiB) | Swap (MiB) | Duration (s) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Original, 13 queries | Before (`9d92867`) | 12/13 | 0.273 | 0.909 | 0.909 | 15.86 | 272.91 | 0 | 1.058 |
+| Original, 13 queries | After (`a02ec95`) | 13/13 | 0.291 | 1.000 | 1.000 | 15.90 | 272.57 | 0 | 0.972 |
+| Transfer, 12 queries | Before (`9d92867`) | 12/12 | 0.222 | 1.000 | 1.000 | 15.86 | 272.02 | 0 | 0.902 |
+| Transfer, 12 queries | After (`a02ec95`) | 12/12 | 0.222 | 1.000 | 1.000 | 15.96 | 271.85 | 0 | 0.860 |
+
+All four runs reported zero swap change and no remaining child processes.
+The corrected original suite now passes every case on the Pi. Peak RSS rose
+0.04 MiB on that suite and 0.10 MiB on the transfer suite.
+
 Measure the funding and deadline term groups on the Pi with:
 
 \`\`\`sh
