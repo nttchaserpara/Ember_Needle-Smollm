@@ -230,4 +230,20 @@ registry checks run with `./venv/bin/python scripts/test_disk_comparison.py`.
 On Linux x86-64 the baseline did not produce a comparison. The new workflow
 reported 40 GiB from synthetic history turn 1 and 33 GiB from the simulated
 current reading, correctly identifying a decrease. The existing 16 recall and
-routing checks also passed. The Pi comparison benchmark is pending.
+routing checks also passed.
+
+On the Raspberry Pi Zero 2 W, both runs of that same synthetic request failed
+at the baseline revision and passed at the revision with disk comparison.
+
+| Run | Revision | Comparison | Request (s) | Full evaluator process (s) | Sampled peak process tree RSS (MiB) | Minimum system RAM available (MiB) |
+| ---: | --- | --- | ---: | ---: | ---: | ---: |
+| 1 | Before (`538e630`) | FAIL | 23.0043 | 124.435 | 52.75 | 243.00 |
+| 1 | After (`4a98854`) | PASS | 0.0257 | 102.756 | 47.82 | 246.48 |
+| 2 | Before (`538e630`) | FAIL | 22.8975 | 124.990 | 52.74 | 243.21 |
+| 2 | After (`4a98854`) | PASS | 0.0244 | 102.968 | 47.82 | 246.32 |
+
+All four measurements reported a system swap delta of 0 MiB and no observed
+children remaining. Request time covers the call to `handle_request` with the
+registry and synthetic history already initialized. The full process includes
+setup and teardown. Both terminal summaries are recorded here. The two runs
+used the same output path, so the JSON file on the Pi contains the second run.
