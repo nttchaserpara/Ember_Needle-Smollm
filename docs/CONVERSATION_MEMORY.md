@@ -199,6 +199,13 @@ history parser without invoking a model or tools. On Linux x86-64 it passed
 non-history rate 1.000, and zero false history routes. These are parser-fixture
 scores; they do not measure the Needle model's general language understanding.
 
+On the Raspberry Pi Zero 2 W at `5e195f4`, the same corpus also passed 21/21
+with route accuracy 1.000, slot exact match 1.000, safe non-history rate 1.000,
+and zero false history routes. `scripts/test_explicit_history.py` passed on the
+Pi, including both registry implementations and previous/current-session
+isolation. The reported run did not capture RSS, available system RAM, swap, or
+elapsed time, so it is a functional result rather than a resource benchmark.
+
 `scripts/test_explicit_history.py` additionally sends the history and
 abstention examples through both tool registries, checks live-query boundaries,
 and verifies previous/current-session isolation.
