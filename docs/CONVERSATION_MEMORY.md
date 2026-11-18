@@ -97,3 +97,25 @@ is capped at 16 MiB; these are not limits on total process RAM. SQLite journals
 may temporarily take additional disk space. Topic search uses bounded text
 matching, not semantic embeddings or model training. A storage failure reports
 that the turn was not saved and does not rerun the tool.
+
+### Pi Zero 2 W recall checkpoint
+
+The device run of `scripts/evaluate_memory.py` passed 7/9 checks at
+`f2ed092` and 9/9 at `46998d2`. The two recovered cases cover traceback
+exclusion and first-result document ranking within the current session.
+Both runs used the evaluator's temporary SQLite database with routing disabled.
+
+Those functional reports did not measure peak memory. To collect a comparable
+resource report on the Pi, run the following from a clone containing both commits:
+
+```sh
+python3 scripts/benchmark_history_recall.py --output ~/emberos-baseline/recall-resources.json
+```
+
+The benchmark reads both snapshots from Git. It runs each revision three times
+in a fresh process and records sampled peak RSS (parent and children), minimum
+system available RAM, system swap change, observed children remaining, and
+elapsed time including interpreter startup, fixture setup and report writing.
+The external monitor uses psutil and waits 10 ms between samples. Brief spikes
+can fall between samples. Model context and inference threads are inapplicable
+for this workload. Device resource measurements are pending.
