@@ -8,7 +8,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from evaluate_disk_comparison import QUERY, run_case, table
-from emberos.disk_comparison import compare_if_requested
+from emberos.disk_comparison import AgentResult, AgentTask, compare_if_requested
 from emberos.tools import ToolRegistry
 from web_ember import WebSafeToolRegistry
 
@@ -32,13 +32,35 @@ def main():
             assert fragment in outcome["answer"] and "97 GiB" not in outcome["answer"], outcome
             assert outcome["success"] == (label in {"verified", "Windows drive"}), outcome
             if outcome["success"]:
-                assert [item["role"] for item in outcome["trace"]] == ["retrieval", "disk_observer", "verifier"]
-                assert outcome["trace"][0]["source_id"] == 1
+                trace = outcome["trace"]
+                assert [item["role"] for item in trace] == [
+                    "planner", "retrieval", "disk_observer", "verifier"]
+                assert trace[0]["planned_roles"] == ["retrieval", "disk_observer", "verifier"]
+                assert len({item["task_id"] for item in trace}) == len(trace)
+                assert [item["parent_task_id"] for item in trace[1:]] == [
+                    item["task_id"] for item in trace[:-1]]
+                assert [item["source_id"] for item in trace[1:]] == [1, 1, 1]
+            elif expected_calls == 1:
+                assert [item["role"] for item in outcome["trace"]] == ["planner", "retrieval"]
+            elif expected_calls == 2:
+                assert [item["role"] for item in outcome["trace"]] == [
+                    "planner", "retrieval", "disk_observer", "verifier"]
             print("PASS", registry.__name__, label)
     with patch("web_ember.WEB_SAFE_TOOLS", {"search_conversation_history"}), TemporaryDirectory() as directory:
         blocked = run_case(WebSafeToolRegistry, Path(directory), old=table("40G"), now=table("33G"))
-        assert not blocked["success"] and blocked["trace"][1]["status"] == "unsupported", blocked
+        assert not blocked["success"] and blocked["trace"][2]["reason"] == "unsupported", blocked
     assert compare_if_requested("How much disk space is free?", None) is None
+    for invalid in (
+        lambda: AgentTask("retrieval", "task-1", {"scope": "all", "source_tool": "disk_usage"}),
+        lambda: AgentTask("disk_observer", "task-2", {"mount": "/", "source_id": 1, "query": "RAM"}),
+        lambda: AgentResult("planner", "task-3", "planned", output={"steps": ["run_shell"]}),
+    ):
+        try:
+            invalid()
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("invalid agent contract was accepted")
     print("PASS web policy and simple request boundary")
 
 

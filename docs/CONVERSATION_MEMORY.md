@@ -227,6 +227,9 @@ session requires restarting the server.
 
 The coordinator runs the following roles in order:
 
+- The planner accepts only the bounded comparison request and emits the fixed
+  `retrieval → disk_observer → verifier` plan. Other requests stay on the
+  existing router path; negated and compound requests do not run tools.
 - The retrieval specialist requests the newest complete, successful
   `disk_usage` turn in the previous session through the active registry. It
   passes on the history ID, mount, and rounded free-space value. Ordinary chat
@@ -243,7 +246,13 @@ disk table format, uses at most two tool calls, reads at most 4,096 characters
 per table, and launches no generation worker. A five-second deadline is
 checked between synchronous steps. A slow OS call can run past the deadline
 before control returns. Repeated comparison answers are excluded from recall.
-The result carries a short role/status trace with the historical turn ID.
+Each role receives a strict `AgentTask` envelope with a unique task ID, parent
+task ID, and only its allowed inputs. It returns an `AgentResult` tied to that
+task, with status and source ID where applicable. The observer gets only the
+drive mount and history ID, not saved conversation text. The verifier gets
+typed readings and checks that both refer to the same drive. The short audit
+trace records role, task/parent IDs, status, reason, source ID, and executed
+tool; it does not store model reasoning.
 
 To evaluate the same prompt on the Pi at baseline commit `538e630` and the
 current checkout, run:
@@ -262,8 +271,12 @@ registry checks run with `./venv/bin/python scripts/test_disk_comparison.py`.
 
 On Linux x86-64 the baseline did not produce a comparison. The new workflow
 reported 40 GiB from synthetic history turn 1 and 33 GiB from the simulated
-current reading, correctly identifying a decrease. The existing 16 recall and
-routing checks also passed.
+current reading, correctly identifying a decrease. After adding strict task
+and result envelopes, the Linux evaluator passed with a 0.0071-second request,
+50.79 MiB sampled process-tree RSS, 7,884.06 MiB minimum available RAM, zero
+swap change, and no remaining child processes. This measurement is from the
+Linux x86-64 development environment; it is not a Raspberry Pi result. The
+existing 16 recall and routing checks also passed.
 
 On the Raspberry Pi Zero 2 W, both runs of that same synthetic request failed
 at the baseline revision and passed at the revision with disk comparison.
