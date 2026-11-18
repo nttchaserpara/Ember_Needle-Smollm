@@ -56,9 +56,9 @@ Lookup is literal: every topic word must match a whole word in a saved request,
 answer, or arguments. Matching results precede failed attempts, with duplicate
 excerpts suppressed. Failed response text is excluded from matching; failures
 remain searchable by their request/arguments and retain their original status.
-A no-match result never falls back to unrelated recent history. However, pasted
-tracebacks stored as user requests can still match a word in a directory name.
-Such a match is not evidence of a meaningful discussion about that subject.
+A no-match result never falls back to unrelated recent history. For a Python
+traceback frame pasted into a request, lookup skips the parent directories and
+keeps the filename searchable. The saved excerpt still shows the original path.
 
 The backend supports all, current, and previous saved sessions. The previous
 session is the latest earlier session containing retained non-recall turns,

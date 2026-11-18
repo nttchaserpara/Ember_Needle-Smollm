@@ -53,15 +53,13 @@ def evaluate(memory, with_routing=False):
             passed &= output.count("gpu_detect") == 1 and output.index("27 GB") < output.index("gpu_detect")
         results.append({"name": name, "passed": passed, "output": str(output), "retrieval": output.data})
     # Reproduce pasted terminal output saved as an ordinary user request.
-    # Literal matching still mistakes a directory name for a discussion topic.
-    # Keep this failure visible instead of testing only clean synthetic chats.
     memory.record('File "C:\\Users\\example\\Documents\\Ember\\tools.py", line 109, in execute_tool',
                   "I couldn't reliably identify the requested action.",
                   {"route": "unresolved_tool_request", "status": "low_confidence"})
     output = memory.recall("documents")
     results.append({"name": "Pasted traceback is not a document discussion",
                     "passed": "tools.py" not in output, "output": str(output),
-                    "retrieval": output.data, "known_limitation": "Literal lookup lacks semantic relevance filtering"})
+                    "retrieval": output.data})
     # With room for only one result, the current session's real discussion
     # must still be found even when the pasted stack frame is more recent.
     output = memory.recall("documents", limit=1, scope="current_session")

@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from itertools import islice
 import json
 from pathlib import Path
+import re
 import sqlite3
 from uuid import uuid4
 
@@ -21,6 +22,7 @@ HISTORY_SCOPES = {"all": "all saved sessions", "current_session": "the current s
                   "previous_session": "the previous saved session"}
 _ASCII_WORD_SEPARATORS = str.maketrans({chr(code): " " for code in range(128)
                                       if not chr(code).isalnum()})
+_FRAME_DIRECTORIES = re.compile(r'^([ \t]*File ")[^"\r\n]*[/\\](?=[^"/\\\r\n]+", line \d+\b)', re.MULTILINE)
 
 
 def _words(text):
@@ -176,7 +178,8 @@ class ConversationMemory:
             for row in db.execute(f"SELECT {fields} FROM turns WHERE {where} ORDER BY id DESC", parameters):
                 score = (True, 0, 0, row["id"])
                 if terms:
-                    request = _words(row["request"])
+                    # Keep the filename and surrounding diagnostic text searchable.
+                    request = _words(_FRAME_DIRECTORIES.sub(r"\1", row["request"]))
                     # Failure output can contain traceback paths and boilerplate
                     # unrelated to the subject. Retrieve failures by their inputs.
                     failed = row["success"] == 0 or row["status"] in {"error", "unsupported"}
