@@ -17,7 +17,7 @@ _DISK_ROW = re.compile(r"(\S+)\s+\d+(?:\.\d+)?[GT]\s+\d+(?:\.\d+)?[GT]\s+(\d+(?:
 _MAX_REPORT_CHARS = 4096
 _MAX_QUERY_CHARS = 4096
 _HANDOFF_SECONDS = 5
-_PLAN_STEPS = ("retrieval", "disk_observer", "verifier")
+_PLAN_STEPS = ("retrieval", "os_action", "disk_observer", "verifier")
 
 
 @dataclass(frozen=True)
@@ -43,15 +43,32 @@ class ComparisonPlan:
     max_handoffs: int = len(_PLAN_STEPS)
 
 
+@dataclass(frozen=True)
+class ToolProposal:
+    """Untrusted structured tool suggestion; only the coordinator can execute it."""
+
+    name: str
+    arguments: dict
+
+    def __post_init__(self):
+        if (not isinstance(self.name, str) or not self.name or len(self.name) > 64
+                or type(self.arguments) is not dict or len(self.arguments) > 8
+                or any(not isinstance(key, str) for key in self.arguments)):
+            raise ValueError("invalid tool proposal")
+        object.__setattr__(self, "arguments", MappingProxyType(dict(self.arguments)))
+
+
 _TASK_FIELDS = {
     "planner": frozenset({"query"}),
     "retrieval": frozenset({"scope", "source_tool"}),
-    "disk_observer": frozenset({"mount", "source_id"}),
+    "os_action": frozenset({"mount", "source_id"}),
+    "disk_observer": frozenset({"mount", "source_id", "report", "success", "tool_status"}),
     "verifier": frozenset({"evidence", "current"}),
 }
 _RESULT_STATUSES = {
     "planner": frozenset({"planned", "not_applicable", "cancelled", "unresolved"}),
     "retrieval": frozenset({"found", "no_evidence"}),
+    "os_action": frozenset({"proposed"}),
     "disk_observer": frozenset({"observed", "unavailable"}),
     "verifier": frozenset({"verified", "unavailable"}),
 }
@@ -80,9 +97,19 @@ class AgentTask:
         elif self.role == "retrieval":
             if self.payload != {"scope": "previous_session", "source_tool": "disk_usage"}:
                 raise ValueError("retrieval scope is restricted to a previous disk report")
-        elif self.role == "disk_observer":
+        elif self.role == "os_action":
             if (self.payload["mount"] not in {"/", "C:\\"}
                     or type(self.payload["source_id"]) is not int or self.payload["source_id"] < 1):
+                raise ValueError("invalid OS action input")
+        elif self.role == "disk_observer":
+            if (self.payload["mount"] not in {"/", "C:\\"}
+                    or type(self.payload["source_id"]) is not int or self.payload["source_id"] < 1
+                    or type(self.payload["success"]) is not bool
+                    or not isinstance(self.payload["tool_status"], str)
+                    or len(self.payload["tool_status"]) > 64
+                    or self.payload["report"] is not None
+                    and (not isinstance(self.payload["report"], str)
+                         or len(self.payload["report"]) > _MAX_REPORT_CHARS + 1)):
                 raise ValueError("invalid disk observation input")
         else:
             if (not isinstance(self.payload["evidence"], HistoricalReading)
@@ -116,6 +143,9 @@ class AgentResult:
         if self.role == "retrieval" and self.status == "found":
             if not isinstance(self.output, HistoricalReading) or self.source_id != self.output.turn_id:
                 raise ValueError("retrieval result must include its source id")
+        if self.role == "os_action" and self.status == "proposed":
+            if not isinstance(self.output, ToolProposal) or self.source_id is None:
+                raise ValueError("OS action must return a tool proposal and source id")
         if self.role == "disk_observer" and self.status == "observed":
             if not isinstance(self.output, DiskReading) or self.source_id is None:
                 raise ValueError("disk observation must include its source id")
@@ -187,14 +217,23 @@ def retrieve_previous(task, read_previous):
     return AgentResult("retrieval", task.task_id, "found", evidence, source_id=evidence.turn_id)
 
 
-def observe_drive(task, read_disk):
-    """OS observation specialist: receives a mount and source id, never history text."""
+def propose_disk_read(task):
+    """OS action specialist: propose one read-only tool call without executing it."""
+    if task.role != "os_action":
+        raise ValueError("OS action specialist received a task for another role")
+    proposal = ToolProposal("disk_usage", {})
+    return AgentResult("os_action", task.task_id, "proposed", proposal,
+                       source_id=task.payload["source_id"])
+
+
+def observe_drive(task):
+    """Observation specialist: inspect only the bounded result of an approved tool call."""
     if task.role != "disk_observer":
         raise ValueError("disk observer received a task for another role")
-    result = read_disk()
-    current = system_drive(result.result) if result.success else None
+    report = task.payload["report"]
+    current = system_drive(report) if task.payload["success"] and report is not None else None
     if current is None:
-        reason = result.status if not result.success else "invalid_disk_report"
+        reason = (task.payload["tool_status"] or "tool_failed") if not task.payload["success"] else "invalid_disk_report"
         return AgentResult("disk_observer", task.task_id, "unavailable", source_id=task.payload["source_id"],
                            reason=reason)
     if current.mount != task.payload["mount"]:
@@ -223,6 +262,8 @@ def verify_comparison(task):
 
 
 def compare_if_requested(query, registry):
+    if not isinstance(query, str) or len(query) > _MAX_QUERY_CHARS:
+        return None
     planner_task = _new_task("planner", {"query": query})
     plan_result = plan_comparison(planner_task)
     if not _task_matches(planner_task, plan_result):
@@ -246,6 +287,7 @@ def compare_if_requested(query, registry):
     deadline = time.monotonic() + _HANDOFF_SECONDS
 
     def execute(name, arguments):
+        registry.validate_arguments(name, arguments)
         calls.append({"name": name, "arguments": arguments})
         return registry.execute_tool(name, arguments)
 
@@ -271,15 +313,47 @@ def compare_if_requested(query, registry):
     if time.monotonic() >= deadline:
         return finish("The time limit expired before the current disk check.", False)
 
-    observer_task = _new_task("disk_observer", {"mount": evidence.reading.mount, "source_id": evidence.turn_id},
-                              retrieval_task.task_id)
-    observation = observe_drive(observer_task, lambda: execute("disk_usage", {}))
+    action_task = _new_task("os_action", {"mount": evidence.reading.mount, "source_id": evidence.turn_id},
+                            retrieval_task.task_id)
+    action = propose_disk_read(action_task)
+    if not _task_matches(action_task, action):
+        trace.append({"role": "os_action", "task_id": action_task.task_id,
+                      "parent_task_id": action_task.parent_task_id, "status": "invalid_result",
+                      "reason": "contract_violation", "source_id": evidence.turn_id})
+        return finish("I couldn't safely check current disk space.", False)
+    proposal = action.output
+    if (not isinstance(proposal, ToolProposal) or proposal.name != "disk_usage"
+            or dict(proposal.arguments) != {} or action.source_id != evidence.turn_id):
+        trace.append(_trace_result(action_task, action, status="rejected", reason="tool_not_allowed"))
+        return finish("I couldn't safely check current disk space.", False)
+    try:
+        current_result = execute(proposal.name, dict(proposal.arguments))
+    except (TypeError, ValueError):
+        trace.append(_trace_result(action_task, action, status="rejected", reason="invalid_tool_arguments"))
+        return finish("I couldn't safely check current disk space.", False)
+    trace.append(_trace_result(action_task, action, status="accepted", tool=proposal.name,
+                               arguments=dict(proposal.arguments)))
+
+    report = getattr(current_result, "result", None)
+    if isinstance(report, str):
+        report = report[:_MAX_REPORT_CHARS + 1]
+    else:
+        report = None
+    observer_task = _new_task("disk_observer", {
+        "mount": evidence.reading.mount,
+        "source_id": evidence.turn_id,
+        "report": report,
+        "success": getattr(current_result, "success", False) is True,
+        "tool_status": getattr(current_result, "status", "")[:64]
+        if isinstance(getattr(current_result, "status", ""), str) else "error",
+    }, action_task.task_id)
+    observation = observe_drive(observer_task)
     if not _task_matches(observer_task, observation):
         trace.append({"role": "disk_observer", "task_id": observer_task.task_id,
                       "parent_task_id": observer_task.parent_task_id, "status": "invalid_result",
-                      "reason": "contract_violation", "source_id": evidence.turn_id, "tool": "disk_usage"})
+                      "reason": "contract_violation", "source_id": evidence.turn_id})
         return finish("I couldn't verify a current reading for the same drive.", False)
-    trace.append(_trace_result(observer_task, observation, tool="disk_usage"))
+    trace.append(_trace_result(observer_task, observation))
     if time.monotonic() >= deadline:
         return finish("The disk check exceeded the comparison time limit.", False)
 

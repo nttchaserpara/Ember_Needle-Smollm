@@ -228,15 +228,18 @@ session requires restarting the server.
 The coordinator runs the following roles in order:
 
 - The planner accepts only the bounded comparison request and emits the fixed
-  `retrieval → disk_observer → verifier` plan. Other requests stay on the
-  existing router path; negated and compound requests do not run tools.
+  `retrieval → os_action → disk_observer → verifier` plan. Other requests stay
+  on the existing router path; negated and compound requests do not run tools.
 - The retrieval specialist requests the newest complete, successful
   `disk_usage` turn in the previous session through the active registry. It
   passes on the history ID, mount, and rounded free-space value. Ordinary chat
   messages cannot supply a measurement.
-- The disk observation specialist receives that mount, requests one current
-  `disk_usage` reading through the same registry, and selects the matching
-  drive. Missing historical evidence stops the request before this step.
+- The OS action specialist proposes `disk_usage` with empty arguments. The
+  coordinator accepts only that exact read-only proposal, validates its
+  arguments with the active registry, and executes it through the registry.
+- The disk observation specialist receives the bounded tool result, mount, and
+  history ID, then selects the matching drive. It never receives conversation
+  text. Missing historical evidence stops the request before the live check.
 - The verifier compares the two reported values and labels both sources. If
   the current reading is unavailable or the mounts disagree, it abstains.
 
@@ -249,10 +252,12 @@ before control returns. Repeated comparison answers are excluded from recall.
 Each role receives a strict `AgentTask` envelope with a unique task ID, parent
 task ID, and only its allowed inputs. It returns an `AgentResult` tied to that
 task, with status and source ID where applicable. The observer gets only the
-drive mount and history ID, not saved conversation text. The verifier gets
-typed readings and checks that both refer to the same drive. The short audit
-trace records role, task/parent IDs, status, reason, source ID, and executed
-tool; it does not store model reasoning.
+drive mount, history ID, and a bounded live tool result, not saved conversation
+text. The coordinator rejects tool proposals outside its allowlist before
+execution. The verifier gets typed readings and checks that both refer to the
+same drive. The short audit trace records role, task/parent IDs, status,
+reason, source ID, and the validated tool proposal; it does not store model
+reasoning.
 
 To evaluate the same prompt on the Pi at baseline commit `538e630` and the
 current checkout, run:
@@ -268,18 +273,23 @@ observed workers. Acceptance requires the correct call order, source ID, old
 and new values, and direction of change. Context size and generation threads
 are inapplicable to this deterministic workflow. Additional CLI and web
 registry checks run with `./venv/bin/python scripts/test_disk_comparison.py`.
+These checks also inject a `run_shell` proposal and verify that only the
+history lookup runs; the proposed shell command is rejected before execution.
 
 On Linux x86-64 the baseline did not produce a comparison. The new workflow
 reported 40 GiB from synthetic history turn 1 and 33 GiB from the simulated
-current reading, correctly identifying a decrease. After adding strict task
-and result envelopes, the Linux evaluator passed with a 0.0071-second request,
-50.79 MiB sampled process-tree RSS, 7,884.06 MiB minimum available RAM, zero
-swap change, and no remaining child processes. This measurement is from the
-Linux x86-64 development environment; it is not a Raspberry Pi result. The
-existing 16 recall and routing checks also passed.
+current reading, correctly identifying a decrease. The Linux x86-64
+development worktree with strict task/result envelopes and a structured
+read-only proposal passed with a 0.0093-second request, 50.74 MiB sampled
+process-tree RSS, 7,840.73 MiB minimum available RAM, zero swap change, an
+18.414-second full evaluator, and no remaining child processes. This is not a
+Raspberry Pi result. The existing 16 recall and routing checks and
+web/confirmation regressions also passed.
 
 On the Raspberry Pi Zero 2 W, all three runs of the same synthetic request
 failed at the baseline revision and passed with the disk comparison workflow.
+The third run validates `a2b75e4` before the structured proposal step added
+afterward; that latest step still needs its Pi run.
 
 | Run | Revision | Comparison | Request (s) | Full evaluator process (s) | Sampled peak process tree RSS (MiB) | Minimum system RAM available (MiB) | Swap delta (MiB) | Children remaining |
 | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
