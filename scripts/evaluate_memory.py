@@ -62,6 +62,14 @@ def evaluate(memory, with_routing=False):
     results.append({"name": "Pasted traceback is not a document discussion",
                     "passed": "tools.py" not in output, "output": str(output),
                     "retrieval": output.data, "known_limitation": "Literal lookup lacks semantic relevance filtering"})
+    # With room for only one result, the current session's real discussion
+    # must still be found even when the pasted stack frame is more recent.
+    output = memory.recall("documents", limit=1, scope="current_session")
+    results.append({"name": "Current session ranks its document discussion first",
+                    "passed": "Today.pdf" in output and "tools.py" not in output
+                              and len(output.data["turn_ids"]) == 1,
+                    "expected_document": "Today.pdf", "output": str(output),
+                    "retrieval": output.data})
     if not with_routing:
         return results
 
