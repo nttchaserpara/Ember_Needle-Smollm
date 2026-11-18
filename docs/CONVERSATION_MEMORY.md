@@ -316,9 +316,9 @@ there are no ranked matches. History continues to scan its bounded store.
 | Updated ranking on Pi Zero 2 W | 11/13 | 0.273 | 0.864 | 0.909 | 0 |
 
 For both sources, storage records now precede the poster for `disk space`.
-The ambiguous notes query `backup` still ranks a capacity note ahead of the
-restore checklist. The history query `grant due date` still returns no match.
-Both expected-empty queries remain empty. These results cover a small English
+The one-word notes query `backup` is ambiguous between storage capacity and
+restoration. The history query `grant due date` remains a missing funding
+synonym at this checkpoint. Both expected-empty queries remain empty. These results cover a small English
 fixture. To measure the updated version on the Pi, compare both revisions in
 fresh processes with the same evaluator:
 
@@ -381,7 +381,7 @@ All six expected-empty checks across both suites remained empty. Scope leaks
 remained at zero. In the synthetic evaluator, sampled peak RSS changed from
 18.11 to 18.16 MiB for the original suite and from 18.15 to 18.12 MiB for the
 transfer suite. The updated transfer run took 0.302 seconds. Device results
-for the synonym change are pending.
+for the synonym change are recorded below.
 
 Run both comparable Pi suites after pulling the change:
 
@@ -391,6 +391,42 @@ for suite in original transfer; do
     --output "$HOME/emberos-baseline/retrieval-synonyms-$suite.json" || break
 done
 ```
+
+The Pi measured the first synonym expansion at commit `9d92867`:
+
+| Suite | Revision | Checks | P@5 | MRR@5 | Recall@5 | Peak RSS (MiB) | Minimum available (MiB) | Swap (MiB) | Duration (s) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Original, 13 queries | Before (`14346cc`) | 11/13 | 0.273 | 0.864 | 0.909 | 15.85 | 265.53 | 0 | 1.000 |
+| Original, 13 queries | After (`9d92867`) | 11/13 | 0.273 | 0.864 | 0.909 | 15.87 | 269.43 | 0 | 0.998 |
+| Transfer, 12 queries | Before (`14346cc`) | 10/12 | 0.178 | 0.778 | 0.778 | 15.85 | 270.31 | 0 | 0.893 |
+| Transfer, 12 queries | After (`9d92867`) | 12/12 | 0.222 | 1.000 | 1.000 | 15.87 | 270.18 | 0 | 0.942 |
+
+None of the four runs left child processes. The transfer suite now retrieves
+both paraphrases while preserving all three expected-empty results.
+
+The first 13-query suite used the ambiguous one-word query `backup` with only
+the restore note labeled relevant. A later review changed that query to the
+clearer `restore backup`. I also added small funding and deadline term groups,
+so `grant due date` can match a saved scholarship deadline when the request
+and result support it.
+
+| Linux x86-64, corrected label | Before (`9d92867`) | After, local worktree |
+| --- | ---: | ---: |
+| Original, 13 queries | 12/13, P@5 0.273, MRR@5 0.909, Recall@5 0.909 | 13/13, P@5 0.291, MRR@5 1.000, Recall@5 1.000 |
+| Transfer, 12 queries | 12/12, P@5 0.222, MRR@5 1.000, Recall@5 1.000 | 12/12, P@5 0.222, MRR@5 1.000, Recall@5 1.000 |
+
+All five expected-empty queries stayed empty and the requested session scopes
+had no leaks. Sampled peak RSS was 18.16 MiB before and 18.17 MiB after for
+the transfer set. The current changes still need their Pi measurement.
+
+Measure the funding and deadline term groups on the Pi with:
+
+\`\`\`sh
+for suite in original transfer; do
+  ./venv/bin/python scripts/benchmark_retrieval.py --baseline 9d92867 --suite "$suite" \\
+    --output "$HOME/emberos-baseline/retrieval-funding-$suite.json" || break
+done
+\`\`\`
 
 ### Ranking on additional topics
 

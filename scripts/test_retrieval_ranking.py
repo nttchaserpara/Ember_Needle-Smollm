@@ -32,10 +32,13 @@ def main():
             notes.export_text(aside)
             pottery = notes.add("Kiln firing schedule", "Heat the clay tiles on Monday.", ["ceramics"])
             notes.export_text(pottery)
+            scholarship = notes.add("Scholarship deadline", "The application is due Friday.", ["education"])
+            notes.export_text(scholarship)
 
             assert ids(notes, "voltage battery") == [7, aside["id"]]
             assert ids(notes, "electronics") == [7]
             assert ids(notes, "pottery oven") == [pottery["id"]]
+            assert ids(notes, "grant due date") == [scholarship["id"]]
             assert notes.get_by_id(7) == original
             if notes._indexed:
                 # Simulate a build without FTS5 by hiding its module listing.
@@ -82,6 +85,9 @@ def main():
         assert recurring.search("irrigation routine")[0]["response"] == "Water the seedlings every Tuesday."
         recurring.record("Inspect the pump", "The maintenance happened Tuesday.", {"status": "success"})
         assert len(recurring.search("irrigation routine")) == 1
+        award_history = ConversationMemory(root / "award.db")
+        award_history.record("Review scholarship deadline", "The application is due Friday.", {"status": "success"})
+        assert award_history.search("grant due date")[0]["response"] == "The application is due Friday."
         art.record("Read the ferry timetable poster", "First sailing at 07:20. Use blue ink.", {"status": "success"})
         assert len(art.search("ferry timetable")) == 2
     print("PASS new topics, session isolation, legacy rows, updates, delete and restore")

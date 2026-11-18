@@ -53,7 +53,7 @@ CASES = [
     ("notes", None, "storage", "Notes tagged for storage planning", ["capacity", "backup_limit"]),
     ("notes", None, "free drive capacity", "Amount of available space on the system drive", ["capacity"]),
     ("notes", None, "deadline scholarship", "Scholarship submission deadline", ["meeting"]),
-    ("notes", None, "backup", "Looking for instructions to restore a data backup", ["restore"]),
+    ("notes", None, "restore backup", "Looking for instructions to restore a data backup", ["restore"]),
     ("notes", None, "ocean tides", "Unrepresented topic", []),
     ("history", "all", "disk space", "Measurements of free space on the drive", ["old_drive", "drive", "today_drive"]),
     ("history", "previous_session", "disk space", "Previous session's disk measurement", ["drive"]),

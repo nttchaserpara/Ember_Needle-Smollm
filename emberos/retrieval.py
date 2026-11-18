@@ -14,6 +14,8 @@ _ALIASES = {
     "kiln": frozenset({"kiln", "oven"}),
     "watering": frozenset({"irrigate", "irrigation", "water", "watering"}),
     "schedule": frozenset({"calendar", "routine", "schedule"}),
+    "funding": frozenset({"award", "bursary", "fellowship", "grant", "scholarship", "scholarships"}),
+    "deadline": frozenset({"date", "deadline", "due", "expiration", "expiry"}),
 }
 _ALIAS_OWNER = {word: concept for concept, values in _ALIASES.items() for word in values}
 _WEEKLY_ROUTINE = re.compile(
