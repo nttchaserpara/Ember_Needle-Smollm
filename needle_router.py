@@ -1079,12 +1079,29 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
     if getattr(tool_registry, "memory", None) is None:
         history_help = ("Conversation history is disabled or unavailable. "
                         "No live system action was taken for this history request.")
+    from emberos.history_routing import explicit_history_arguments, select_history
+
+    try:
+        history_args = explicit_history_arguments(query)
+    except ValueError as exc:
+        if str(exc) == "negated_request":
+            return {"route": "no_action", "reason": "negated_request",
+                    "response": "No action taken.", "truncated": False}
+        return {"route": "unresolved_tool_request", "reason": "uncertain_history_request",
+                "response": history_help, "truncated": False}
+    if history_args is not None:
+        if getattr(tool_registry, "memory", None) is None:
+            return {"route": "unresolved_tool_request", "reason": "memory_unavailable",
+                    "response": history_help, "truncated": False}
+        if diagnostics is not None:
+            diagnostics["deterministic_read_only_route"] = "search_conversation_history"
+        return _execute_call({"name": "search_conversation_history", "arguments": history_args},
+                             tool_registry)
+
     known_file_reference_call = _known_file_reference_call(query)
     known_call = known_file_reference_call or _known_intent_call(query)
     history_requested = False
     # Intent separation must not disappear when history storage is disabled.
-    from emberos.history_routing import select_history
-
     selected = select_history(query)
     if diagnostics is not None:
         diagnostics["history_selection"] = {"model_input": query, "raw_model_result": selected}

@@ -36,7 +36,14 @@ pending-answer state have been removed. Device-information tools do not request
 a conversation-versus-RAM choice. An unresolved request does not capture the
 next message as a search topic.
 
-With memory enabled, a small Needle selection view checks for conversation
+The router recognizes a limited set of explicit English recall requests.
+For example, `Which budgets did we discuss last time?` searches for
+`budgets` in the previous saved session. `Show my recent conversations`
+lists recent excerpts across sessions. These forms use the existing history
+tool through the active registry. A recognized history request with an unclear
+scope or additional action asks for clarification.
+
+For other inputs, a small Needle selection view checks for conversation
 recall. It can prevent a conflicting live action but cannot execute tools or
 turn the full question into a search query. The main Needle router must select
 the history tool and generate valid arguments at the existing confidence
@@ -109,7 +116,7 @@ Those functional reports did not measure peak memory. To collect a comparable
 resource report on the Pi, run the following from a clone containing both commits:
 
 ```sh
-python3 scripts/benchmark_history_recall.py --output ~/emberos-baseline/recall-resources.json
+./venv/bin/python scripts/benchmark_history_recall.py --output ~/emberos-baseline/recall-resources.json
 ```
 
 The benchmark reads both snapshots from Git. It runs each revision three times
@@ -118,4 +125,52 @@ system available RAM, system swap change, observed children remaining, and
 elapsed time including interpreter startup, fixture setup and report writing.
 The external monitor uses psutil and waits 10 ms between samples. Brief spikes
 can fall between samples. Model context and inference threads are inapplicable
-for this workload. Device resource measurements are pending.
+for this workload.
+
+The following measurements come from the six terminal results reported from
+the Pi Zero 2 W. The device saved the JSON report to
+`~/emberos-baseline/recall-resources.json`.
+
+| Revision | Run | Checks passed | Sampled peak process tree RSS (MiB) | Minimum system RAM available (MiB) | Elapsed (s) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Before (`f2ed092`) | 1 | 7/9 | 14.21 | 271.61 | 0.697 |
+| After (`46998d2`) | 1 | 9/9 | 14.17 | 271.72 | 0.692 |
+| After | 2 | 9/9 | 14.16 | 271.71 | 0.691 |
+| Before | 2 | 7/9 | 14.21 | 271.62 | 0.719 |
+| Before | 3 | 7/9 | 14.21 | 264.51 | 0.693 |
+| After | 3 | 9/9 | 14.16 | 264.56 | 0.693 |
+
+Each run reported a system swap delta of 0 MiB and zero observed child processes
+remaining at completion. Median elapsed time was 0.697 s before and 0.692 s
+after. The largest sampled process tree RSS across the three runs was 14.21 MiB
+before and 14.17 MiB after.
+
+### Pi Zero 2 W baseline with routing
+
+At commit `40b1e57`, one device run with `--with-routing` passed 11/16
+checks. Direct retrieval passed 9/9. Of the seven natural-language checks,
+both live disk requests passed and all five history requests failed. A history
+check requires both the expected tool call and the expected content. Non-history
+tool calls use a stub in this evaluator.
+
+The Python wrapper recorded 122.23 seconds for the full run and 56.21 MiB
+maximum RSS using Linux `getrusage(RUSAGE_CHILDREN).ru_maxrss`. This run
+exited with code 1 for failed checks. The Pi saved per-case diagnostics in
+`~/emberos-baseline/routing-before.json` and resource measurements in
+`~/emberos-baseline/routing-before-resources.json`.
+
+The Pi diagnostics showed that two requests stopped at the history selector.
+For recent conversations the main router proposed history with an empty scope
+and low confidence. For pending tasks it proposed a live task list and
+abstained. For the RAM discussion it called the evaluator's CPU-info stub at
+confidence 0.7339.
+
+On Linux x86-64 the synthetic evaluator passed 11/16 before explicit recall
+routing and 16/16 afterward. The two live disk cases still passed. Post-change
+resource and routing measurements on the Pi are pending.
+
+To repeat the baseline method on the Pi and keep the original reports:
+
+```sh
+./venv/bin/python scripts/benchmark_memory_routing.py --output ~/emberos-baseline/routing-after.json
+```
