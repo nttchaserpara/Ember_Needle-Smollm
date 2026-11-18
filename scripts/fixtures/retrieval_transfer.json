@@ -1,0 +1,36 @@
+{
+  "notes": [
+    ["rail", "Train timetable", "The first departure for Seabrook is at 07:20.", ["transport"]],
+    ["rail_art", "Mural lettering", "The artist copied the words train timetable onto a sign.", ["art"]],
+    ["film", "Cinema tickets", "Reserve two seats at the Rialto.", ["leisure"]],
+    ["repair", "Projector repair", "Replace the cooling fan before the screening.", ["maintenance"]],
+    ["clay", "Kiln firing schedule", "Heat the clay tiles on Monday.", ["ceramics"]],
+    ["ink", "Printing supplies", "Order blue ink cartridges.", ["office"]]
+  ],
+  "sessions": {
+    "archive": [["old_train", "Train timetable", "The first departure was at 07:45."]],
+    "previous_session": [
+      ["train", "Read the train timetable", "The first departure was at 07:20."],
+      ["plant", "Review greenhouse watering", "Water the seedlings every Tuesday."]
+    ],
+    "current_session": [
+      ["film", "Book cinema tickets", "Two seats at the Rialto."],
+      ["mural", "Review the train timetable mural design", "Use green paint."],
+      ["pump", "Inspect the pump", "The impeller is worn."]
+    ]
+  },
+  "cases": [
+    ["notes", null, "train timetable", "Time of the first train", ["rail"]],
+    ["notes", null, "tickets cinema", "Cinema seat reservation", ["film"]],
+    ["notes", null, "repair cooling fan", "Repairing the projector fan", ["repair"]],
+    ["notes", null, "pottery oven", "Schedule for firing clay", ["clay"]],
+    ["notes", null, "transport", "Tagged transport information", ["rail"]],
+    ["notes", null, "ink spill cleanup", "Cleaning up a spill rather than ordering ink", []],
+    ["history", "all", "train timetable", "Train departure times", ["old_train", "train"]],
+    ["history", "previous_session", "train timetable", "Last session's train departure time", ["train"]],
+    ["history", "current_session", "train timetable", "Train departure times in this session", []],
+    ["history", "previous_session", "irrigation routine", "The greenhouse watering schedule", ["plant"]],
+    ["history", "current_session", "pump impeller", "Reported pump condition", ["pump"]],
+    ["history", "current_session", "greenhouse", "Greenhouse discussion this session", []]
+  ]
+}

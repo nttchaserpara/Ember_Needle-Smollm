@@ -64,6 +64,18 @@ def main():
         assert current.search("voltage battery", limit=1, scope="current_session")[0]["response"] == "11 V"
         assert [r["response"] for r in current.search("battery", scope="previous_session")] == ["12 V"]
         assert current.search("wind turbine") == []
+
+        art = ConversationMemory(root / "art.db")
+        art.record("Review the fire drill poster", "Increase the font size.", {"status": "success"})
+        assert art.recall("fire drill").data["retrieval"] == "no_matches"
+        for topic in ("poster", "fire drill poster", "font size"):
+            assert art.search(topic)[0]["response"] == "Increase the font size.", topic
+        art.record("Review the fire drill diagram", "The fire drill starts at noon.", {"status": "success"})
+        assert [r["response"] for r in art.search("fire drill")] == ["The fire drill starts at noon."]
+        art.record("Read the ferry timetable", "The first sailing is at 07:20.", {"status": "success"})
+        assert art.search("ferry timetable")[0]["response"] == "The first sailing is at 07:20."
+        art.record("Read the ferry timetable poster", "First sailing at 07:20. Use blue ink.", {"status": "success"})
+        assert len(art.search("ferry timetable")) == 2
     print("PASS new topics, session isolation, legacy rows, updates, delete and restore")
 
 

@@ -73,7 +73,7 @@ def score(ranked, relevant):
     }
 
 
-def evaluate(directory):
+def evaluate(directory, notes_fixture=NOTES, sessions=SESSIONS, cases=CASES):
     # notes.py resolves its default data directory on import.
     os.environ["EMBER_DATA_DIR"] = str(directory)
     from use_cases.notes import NotesManager
@@ -81,19 +81,19 @@ def evaluate(directory):
     results = []
     with closing(NotesManager(directory / "notes.sqlite3")) as notes:
         note_keys = {}
-        for key, title, content, tags in NOTES:
+        for key, title, content, tags in notes_fixture:
             note = notes.add(title, content, tags)
             notes.export_text(note)
             note_keys[note["id"]] = key
 
         turn_keys = {}
-        for session, turns in SESSIONS.items():
+        for session, turns in sessions.items():
             memory = ConversationMemory(directory / "history.sqlite3")
             for key, request, answer in turns:
                 memory.record(request, answer, {"status": "success"})
                 turn_keys[memory.session_id, request] = (key, session)
 
-        for source, scope, query, need, relevant in CASES:
+        for source, scope, query, need, relevant in cases:
             outside_scope = []
             if source == "notes":
                 rows = notes.search(query, limit=5)
@@ -134,14 +134,20 @@ def summarize(rows):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--suite", choices=("original", "transfer"), default="original")
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="ember-ir-") as temp:
-        rows = evaluate(Path(temp))
+        if args.suite == "transfer":
+            fixture_path = Path(__file__).parent / "fixtures" / "retrieval_transfer.json"
+            fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+            rows = evaluate(Path(temp), fixture["notes"], fixture["sessions"], fixture["cases"])
+        else:
+            rows = evaluate(Path(temp))
     summaries = {source: summarize([row for row in rows if row["source"] == source])
                  for source in ("notes", "history")}
     summaries["all"] = summarize(rows)
     passed = sum(row["passed"] for row in rows)
-    report = {"python": platform.python_version(), "sqlite": sqlite3.sqlite_version,
+    report = {"suite": args.suite, "python": platform.python_version(), "sqlite": sqlite3.sqlite_version,
               "passed": passed, "total": len(rows), "summary": summaries, "results": rows}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

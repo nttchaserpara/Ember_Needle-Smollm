@@ -10,7 +10,7 @@ import sqlite3
 from uuid import uuid4
 
 from emberos.outcomes import ToolOutput
-from emberos.retrieval import relevance, words
+from emberos.retrieval import incidental_visual_reference, relevance, words
 
 
 MAX_TURNS = 1000
@@ -179,6 +179,8 @@ class ConversationMemory:
                     failed = row["success"] == 0 or row["status"] in {"error", "unsupported"}
                     rank = relevance(terms, request, row["arguments_json"], "" if failed else row["response"])
                     if not rank:
+                        continue
+                    if not failed and incidental_visual_reference(terms, request, row["arguments_json"], row["response"]):
                         continue
                     score = (not failed, rank, row["id"])
                 identity = (row["request"], row["response"], row["status"])

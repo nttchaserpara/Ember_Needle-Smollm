@@ -312,6 +312,7 @@ there are no ranked matches. History continues to scan its bounded store.
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Baseline on Pi | 7/13 | 0.218 | 0.545 | 0.636 | 0 |
 | Updated ranking on Linux x86-64 | 11/13 | 0.273 | 0.864 | 0.909 | 0 |
+| Updated ranking on Pi Zero 2 W | 11/13 | 0.273 | 0.864 | 0.909 | 0 |
 
 For both sources, storage records now precede the poster for `disk space`.
 The ambiguous notes query `backup` still ranks a capacity note ahead of the
@@ -328,3 +329,44 @@ The resource figures cover the full evaluator, including database creation,
 exports, index setup and report writing. The separate regression script
 `scripts/test_retrieval_ranking.py` exercises a battery-voltage topic,
 session isolation, legacy note migration and index updates.
+
+The Raspberry Pi Zero 2 W produced the following measurements in one run per
+revision. Its report is saved at `~/emberos-baseline/retrieval-ranking-comparison.json`.
+
+| Revision | Peak sampled process tree RSS (MiB) | Minimum system RAM available (MiB) | Swap delta (MiB) | Full evaluator (s) | Observed children remaining |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Before (`1fd1ddc`) | 15.65 | 269.12 | 0 | 0.926 | 0 |
+| After (`62e15ad`) | 15.87 | 269.38 | 0 | 0.977 | 0 |
+
+### Ranking on additional topics
+
+A second synthetic English fixture was labeled after the ranker at `62e15ad`
+was frozen. It contains 12 queries about transport, maintenance, cinema and
+other topics across notes and three conversation sessions. Nine queries have
+relevant records and three expect an empty response. Both implementations
+received the same fixture and evaluator.
+
+| Linux x86-64 | First-hit or empty checks | P@5 | MRR@5 | Recall@5 | Expected empty returned empty | Scope leaks |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Original ranking | 5/12 | 0.133 | 0.444 | 0.556 | 2/3 | 0 |
+| Field-weighted ranking | 9/12 | 0.178 | 0.778 | 0.778 | 2/3 | 0 |
+
+At `62e15ad` the ranker missed two paraphrases. It also returned a mural discussion
+for a current-session train timetable query even though the session contained
+no departure times. That hit came from the correct session. To reproduce:
+
+```sh
+./venv/bin/python scripts/benchmark_retrieval.py --suite transfer --output ~/emberos-baseline/retrieval-new-topics.json
+```
+
+History search now handles one English pattern for incidental mentions. In
+“review the train timetable mural”, the topic modifies a visual artifact.
+When the whole reply is a short styling instruction such as “Use green paint”,
+and neither the reply nor the tool arguments mention the topic, the turn is
+omitted for that topic. Searches for the artwork or styling can still retrieve
+it. This rule does not verify arbitrary claims or interpret paraphrases.
+
+With this change the additional fixture passed 10/12 locally. All three
+expected-empty queries returned no results. The positive-query MRR@5 stayed
+at 0.778, and the original fixture stayed at 11/13. To isolate this change on
+the Pi, pass `--baseline 62e15ad` when benchmarking each suite.
