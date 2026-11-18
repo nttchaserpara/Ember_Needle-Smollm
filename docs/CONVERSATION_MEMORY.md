@@ -145,7 +145,7 @@ remaining at completion. Median elapsed time was 0.697 s before and 0.692 s
 after. The largest sampled process tree RSS across the three runs was 14.21 MiB
 before and 14.17 MiB after.
 
-### Pi Zero 2 W baseline with routing
+### Pi Zero 2 W before and after explicit history routing
 
 At commit `40b1e57`, one device run with `--with-routing` passed 11/16
 checks. Direct retrieval passed 9/9. Of the seven natural-language checks,
@@ -166,11 +166,68 @@ abstained. For the RAM discussion it called the evaluator's CPU-info stub at
 confidence 0.7339.
 
 On Linux x86-64 the synthetic evaluator passed 11/16 before explicit recall
-routing and 16/16 afterward. The two live disk cases still passed. Post-change
-resource and routing measurements on the Pi are pending.
+routing and 16/16 afterward. The Pi also passed all 16 checks at `538e630`.
+
+| Pi revision | Direct recall | History requests | Live disk requests | Full run (s) | Maximum RSS (MiB) | Exit code |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Before (`40b1e57`) | 9/9 | 0/5 | 2/2 | 122.23 | 56.21 | 1 |
+| After (`538e630`) | 9/9 | 5/5 | 2/2 | 16.703 | 53.05 | 0 |
+
+Each row represents one full evaluator run on the Pi. Both used the same nine
+recall and seven routing cases and the same Linux peak RSS method. The device
+saved the after-run reports as `routing-after.json` and
+`routing-after-resources.json` in `~/emberos-baseline/`.
 
 To repeat the baseline method on the Pi and keep the original reports:
 
 ```sh
 ./venv/bin/python scripts/benchmark_memory_routing.py --output ~/emberos-baseline/routing-after.json
 ```
+
+### Compare a saved disk report with a current reading
+
+In the CLI or web chat, ask `How much free disk space do I have?` to save a
+disk report. Start a new EmberOS session using the same history database, then
+ask `Compare my current disk space with last time.` The comparison uses the
+previous saved session as defined above. In web mode, starting a new backend
+session requires restarting the server.
+
+The coordinator runs the following roles in order:
+
+- The retrieval specialist requests the newest complete, successful
+  `disk_usage` turn in the previous session through the active registry. It
+  passes on the history ID, mount, and rounded free-space value. Ordinary chat
+  messages cannot supply a measurement.
+- The disk observation specialist receives that mount, requests one current
+  `disk_usage` reading through the same registry, and selects the matching
+  drive. Missing historical evidence stops the request before this step.
+- The verifier compares the two reported values and labels both sources. If
+  the current reading is unavailable or the mounts disagree, it abstains.
+
+This first workflow recognizes a limited English comparison request and
+supports the root mount on Linux and C: on Windows. It accepts the existing
+disk table format, uses at most two tool calls, reads at most 4,096 characters
+per table, and launches no generation worker. A five-second deadline is
+checked between synchronous steps. A slow OS call can run past the deadline
+before control returns. Repeated comparison answers are excluded from recall.
+The result carries a short role/status trace with the historical turn ID.
+
+To evaluate the same prompt on the Pi at baseline commit `538e630` and the
+current checkout, run:
+
+```sh
+./venv/bin/python scripts/evaluate_disk_comparison.py --output ~/emberos-baseline/disk-comparison.json
+```
+
+The evaluator reads the older sources from Git, uses disposable databases and
+stubs device actions. It prints separate request and full-process durations,
+sampled peak RSS, minimum available system RAM, swap change, and remaining
+observed workers. Acceptance requires the correct call order, source ID, old
+and new values, and direction of change. Context size and generation threads
+are inapplicable to this deterministic workflow. Additional CLI and web
+registry checks run with `./venv/bin/python scripts/test_disk_comparison.py`.
+
+On Linux x86-64 the baseline did not produce a comparison. The new workflow
+reported 40 GiB from synthetic history turn 1 and 33 GiB from the simulated
+current reading, correctly identifying a decrease. The existing 16 recall and
+routing checks also passed. The Pi comparison benchmark is pending.

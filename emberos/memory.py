@@ -143,10 +143,10 @@ class ConversationMemory:
                 request, answer, route, tool, arguments, status,
                 result.get("success"), confidence,
                 query_clipped or response_clipped or args_clipped or bool(result.get("truncated")),
-                tool == "search_conversation_history" or route == "memory_view",
+                tool == "search_conversation_history" or route in {"memory_view", "disk_comparison"},
             ))
 
-    def search(self, query="", limit=5, *, scope="all"):
+    def search(self, query="", limit=5, *, scope="all", source_tool=None):
         if not isinstance(query, str):
             raise ValueError("query must be text")
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 5:
@@ -173,6 +173,9 @@ class ConversationMemory:
                     session = previous[0]
                 where += " AND session_id = ?"
                 parameters.append(session)
+            if source_tool is not None:
+                where += " AND tool = ? AND route = 'tool_call' AND success = 1 AND truncated = 0"
+                parameters.append(source_tool)
             # Stream the bounded store; retain only five candidates, rather
             # than loading the database or adding an embedding model/index.
             for row in db.execute(f"SELECT {fields} FROM turns WHERE {where} ORDER BY id DESC", parameters):

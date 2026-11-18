@@ -80,9 +80,16 @@ class ToolRegistry:
         self._tools: dict[str, ToolDef] = {}
         self._register_builtins()
 
-    def _search_conversation_history(self, query: str = "", scope: str = "all"):
+    def _search_conversation_history(self, query: str = "", scope: str = "all", source_tool: str = ""):
         if self.memory is None:
             return ToolOutput.failure("Conversation memory is disabled or unavailable.", status="unsupported")
+        if source_tool == "disk_usage":
+            rows = self.memory.search(query, limit=1, scope=scope, source_tool=source_tool)
+            if not rows:
+                return ToolOutput("No saved disk report in scope.", status="partial")
+            row = rows[0]
+            return ToolOutput(row["response"], data={"source": "conversation_history", "scope": scope,
+                              "turn_id": row["id"], "tool": source_tool})
         return self.memory.recall(query, scope=scope)
 
     def _get_agent_context(self):
@@ -913,6 +920,8 @@ class ToolRegistry:
                 "query": {"type": "string", "description": "Topic words from the request; empty for recent conversations"},
                 "scope": {"type": "string", "enum": ["all", "current_session", "previous_session"],
                           "description": "The session scope to search"},
+                "source_tool": {"type": "string", "enum": ["", "disk_usage"],
+                                "description": "Optional source tool for a saved report"},
             },
             func=self._search_conversation_history,
         )

@@ -29,6 +29,7 @@ import needle
 
 from emberos.undo import READ_ONLY_TOOLS
 from emberos.config import data_dir
+from emberos.disk_comparison import compare_if_requested
 
 # ── Core file/system tools ──────────────────────────────────────────
 @needle.tool
@@ -1060,6 +1061,9 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
     Every existing caller (benchmarks, evaluators) doesn't pass this, so
     nothing about them changes.
     """
+    comparison = compare_if_requested(query, tool_registry)
+    if comparison is not None:
+        return comparison
     directory_listing_call = _known_directory_listing_call(query)
     if directory_listing_call:
         try:

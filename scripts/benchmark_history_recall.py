@@ -33,18 +33,13 @@ def snapshot(label, directory):
     return commit
 
 
-def measure(directory):
-    report = directory / "checks.json"
-    report.unlink(missing_ok=True)
+def sample_job(command, directory, *, env=None):
     available = psutil.virtual_memory().available
     swap = psutil.swap_memory().used
     peak = peak_parent = peak_children = samples = 0
     children_seen = set()
     start = time.monotonic()
-    with subprocess.Popen(
-        [sys.executable, "-B", "scripts/evaluate_memory.py", "--output", str(report)],
-        cwd=directory, stdout=subprocess.DEVNULL,
-    ) as job:
+    with subprocess.Popen(command, cwd=directory, env=env, stdout=subprocess.DEVNULL) as job:
         process = psutil.Process(job.pid)
         while job.poll() is None:
             try:
@@ -62,14 +57,10 @@ def measure(directory):
             time.sleep(SAMPLE_INTERVAL)
     duration = time.monotonic() - start
     swap_delta = psutil.swap_memory().used - swap
-    if job.returncode not in (0, 1) or not samples or not report.exists():
-        raise RuntimeError(f"Evaluator did not complete a measurable run (exit {job.returncode})")
-    checks = json.loads(report.read_text())
-    if checks["with_routing"] or checks["total"] != 9:
-        raise RuntimeError("Expected the nine recall-only checks")
+    if not samples:
+        raise RuntimeError("No resource samples collected")
     return {
-        "passed": checks["passed"], "total": checks["total"],
-        "failed_cases": [row["name"] for row in checks["results"] if not row["passed"]],
+        "exit_code": job.returncode,
         "peak_tree_rss_mib": round(peak / MIB, 2),
         "peak_parent_rss_mib": round(peak_parent / MIB, 2),
         "peak_children_rss_mib": round(peak_children / MIB, 2),
@@ -79,6 +70,19 @@ def measure(directory):
         "observed_child_pids": sorted(child.pid for child in children_seen),
         "observed_children_still_running": sorted(child.pid for child in children_seen if child.is_running()),
     }
+
+
+def measure(directory):
+    report = directory / "checks.json"
+    report.unlink(missing_ok=True)
+    stats = sample_job([sys.executable, "-B", "scripts/evaluate_memory.py", "--output", str(report)], directory)
+    if stats["exit_code"] not in (0, 1) or not report.exists():
+        raise RuntimeError(f"Evaluator did not complete (exit {stats['exit_code']})")
+    checks = json.loads(report.read_text())
+    if checks["with_routing"] or checks["total"] != 9:
+        raise RuntimeError("Expected the nine recall-only checks")
+    return {**stats, "passed": checks["passed"], "total": checks["total"],
+            "failed_cases": [row["name"] for row in checks["results"] if not row["passed"]]}
 
 
 def main():
