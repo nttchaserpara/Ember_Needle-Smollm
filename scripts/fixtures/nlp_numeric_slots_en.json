@@ -1,0 +1,48 @@
+[
+  {
+    "query": "Set the speaker volume to 44 percent.",
+    "expected": {"name": "set_volume", "arguments": {"level": 44}}
+  },
+  {
+    "query": "Change the volume to 25%.",
+    "expected": {"name": "set_volume", "arguments": {"level": 25}}
+  },
+  {
+    "query": "Set the screen brightness to 30 percent.",
+    "expected": {"name": "set_brightness", "arguments": {"level": 30}}
+  },
+  {
+    "query": "Increase the volume by 3 steps.",
+    "expected": {"name": "volume_up", "arguments": {"steps": 3}}
+  },
+  {
+    "query": "Set the volume to 110 percent.",
+    "expected": null,
+    "expected_route": "unresolved_tool_request",
+    "expected_reason": "out_of_range_level"
+  },
+  {
+    "query": "Set the volume to 44 dB.",
+    "expected": null,
+    "expected_route": "unresolved_tool_request",
+    "expected_reason": "unsupported_audio_unit"
+  },
+  {
+    "query": "Set screen brightness to 30 lux.",
+    "expected": null,
+    "expected_route": "unresolved_tool_request",
+    "expected_reason": "unsupported_brightness_unit"
+  },
+  {
+    "query": "Set the volume to negative 20 percent.",
+    "expected": null,
+    "expected_route": "unresolved_tool_request",
+    "expected_reason": "out_of_range_level"
+  },
+  {
+    "query": "Set the volume to 44.5 percent.",
+    "expected": null,
+    "expected_route": "unresolved_tool_request",
+    "expected_reason": "unsupported_numeric_precision"
+  }
+]

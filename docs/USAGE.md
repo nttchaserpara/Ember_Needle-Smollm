@@ -124,9 +124,10 @@ ambigu, tanggal ISO tidak valid, atau prioritas tidak termasuk `low`, `normal`,
 dan `high`, Ember meminta klarifikasi tanpa membuat task. Penolakan eksplisit
 seperti `Do not add a task ...` juga tidak menjalankan tindakan.
 
-Daftar bisa kosong. Sebelas contoh routing tugas berbahasa Inggris lulus pada
-evaluasi Pi di `f310f55`; evaluator memakai pencatat pengganti, sehingga tidak
-mengubah daftar tugas. Variasi bahasa di luar contoh itu tetap perlu diuji.
+Daftar bisa kosong. Sebelas contoh task-slot lulus pada evaluasi routing Pi di
+`f310f55`; sepuluh kasus tambahan untuk tanggal dan prioritas ambigu lulus di
+`dbaf02b`. Evaluator memakai pencatat pengganti, sehingga tidak mengubah daftar
+tugas. Variasi bahasa di luar contoh itu tetap perlu diuji.
 Sapaan seperti `hello` belum berarti tersedia chatbot percakapan umum dengan
 respons LLM.
 
@@ -137,6 +138,8 @@ turn my screen brightness to 30
 ```
 
 Ember membaca ulang persentase dari Windows sebelum menampilkan hasil.
+Level brightness memakai rentang 0–100 persen; nilai di luar rentang atau satuan
+seperti `lux` meminta klarifikasi.
 Provider yang tidak mengembalikan `ReturnValue` sekarang tetap diperiksa lewat
 pembacaan ulang, bukan langsung dianggap menolak perubahan. Error Windows dan
 hasil yang tidak sesuai target tetap dilaporkan sebagai gagal atau parsial.
@@ -371,6 +374,9 @@ turn up my volume by 12 steps
 
 `44` adalah target persen; `12 steps` adalah langkah relatif. Lihat
 [panduan audio](setup/AUDIO_TOOLS.md) untuk perilaku mute dan platformnya.
+Target volume memakai bilangan bulat 0–100 persen. Satuan seperti `dB` tidak
+dikonversi ke level persen; nilai desimal atau satuan yang berbeda meminta
+klarifikasi sebelum Ember mengubah volume.
 
 ### Notes / dokumen
 

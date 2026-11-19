@@ -704,7 +704,7 @@ unexpected task proposals at `f310f55` to 10/10 with no proposals on unclear
 requests. The original 11 task-slot cases remained 11/11, and the file-action
 regression suite remained 9/9 with zero false actions.
 
-To compare the ten new cases on the Pi, run:
+To reproduce the comparison on the Pi, run:
 
 ```sh
 ./venv/bin/python scripts/benchmark_nlp_slots.py --baseline f310f55 \
@@ -712,5 +712,45 @@ To compare the ten new cases on the Pi, run:
   --output ~/emberos-baseline/nlp-task-edges.json
 ```
 
-This isolates the new routing behavior and records RSS, available system RAM,
-swap, elapsed time, and child-process cleanup. The Pi result is pending.
+The Pi Zero 2 W ran the ten-case fixture once at `f310f55` and once at
+`dbaf02b`. The baseline proposed task actions for eight clarification cases;
+the updated route passed all ten without calling a tool for unclear inputs.
+
+| Pi revision | Expected routes and arguments | Unexpected actions | Failed valid requests |
+| --- | ---: | ---: | ---: |
+| `f310f55` | 0/10 | 8 | 2 |
+| `dbaf02b` | 10/10 | 0 | 0 |
+
+| Pi revision | Sampled peak process tree RSS | Minimum system RAM available | Swap delta | Full evaluator | Child processes remaining |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `f310f55` | 59.73 MiB | 239.39 MiB | +0 MiB | 382.783 s | none |
+| `dbaf02b` | 57.15 MiB | 243.32 MiB | +0 MiB | 62.650 s | none |
+
+These are single runs. Tool execution was stubbed; no task data changed. The
+benchmark does not report inference context or thread counts.
+
+#### Numeric values and units
+
+A nine-case fixture checks volume and brightness percentages, relative volume
+steps, values outside the supported 0–100 range, and unsupported units such as
+`dB` and `lux`, plus fractional values rejected by the integer tool schema. The
+routing guard asks for clarification instead of interpreting those units as
+percentages or attempting an invalid level.
+
+On Linux, the baseline at `dbaf02b` matched 4/9 cases, proposed three
+unsupported actions, and abstained without the expected clarification for two
+other invalid inputs. The current worktree matched 9/9; the task-slot,
+ambiguous-task and file-action regression suites also remained green.
+
+The Pi comparison is pending. Run it after pulling the update:
+
+```sh
+./venv/bin/python scripts/benchmark_nlp_slots.py --baseline dbaf02b \
+  --cases scripts/fixtures/nlp_numeric_slots_en.json \
+  --output ~/emberos-baseline/nlp-numeric-slots.json
+```
+
+The evaluator substitutes a recorder for tool execution; it will not change
+volume or brightness. This benchmark records process RSS, system RAM available,
+swap, duration and child-process cleanup, but not inference context or thread
+counts.

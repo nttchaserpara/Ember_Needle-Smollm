@@ -1171,6 +1171,52 @@ def _task_slot_clarification(query: str) -> dict | None:
     return None
 
 
+_NUMERIC_LEVEL_VALUE = (
+    r"(?P<number>negative\s+\d+(?:\.\d+)?|[+-]?\d+(?:\.\d+)?)"
+    r"(?:\s*(?P<unit>%|[a-z][a-z0-9/-]*))?(?=\s|[.!?,]|$)"
+)
+_ABSOLUTE_VOLUME_LEVEL = re.compile(
+    rf"\b(?:set|change|turn)\b.*?\b(?:(?:speaker|audio)\s+)?volume\s+to\s+{_NUMERIC_LEVEL_VALUE}",
+    re.IGNORECASE,
+)
+_ABSOLUTE_BRIGHTNESS_LEVEL = re.compile(
+    rf"\b(?:set|change|turn|adjust)\b.*?\b(?:(?:screen|display|monitor)\s+)?brightness\s+to\s+{_NUMERIC_LEVEL_VALUE}",
+    re.IGNORECASE,
+)
+
+
+def _numeric_level_clarification(query: str) -> dict | None:
+    """Prevent unit or range mistakes for absolute volume/brightness values."""
+    requests = (
+        (_ABSOLUTE_VOLUME_LEVEL, "volume", "unsupported_audio_unit"),
+        (_ABSOLUTE_BRIGHTNESS_LEVEL, "brightness", "unsupported_brightness_unit"),
+    )
+    for pattern, control, unit_reason in requests:
+        for match in pattern.finditer(query):
+            raw_number = match.group("number").strip().casefold()
+            numeric_text = raw_number.split()[-1] if raw_number.startswith("negative ") else raw_number
+            unit = (match.group("unit") or "").casefold()
+            if unit in {"for", "on", "now", "please", "and", "then", "to"}:
+                unit = ""
+            if unit not in {"", "%", "percent", "percentage"}:
+                return {
+                    "reason": unit_reason,
+                    "response": f"{control.capitalize()} must be given as a percentage from 0 to 100. What percentage should I use?",
+                }
+            if "." in numeric_text:
+                return {
+                    "reason": "unsupported_numeric_precision",
+                    "response": f"{control.capitalize()} must be a whole percentage from 0 to 100. What integer value should I use?",
+                }
+            value = -int(numeric_text) if raw_number.startswith("negative ") else int(numeric_text)
+            if not 0 <= value <= 100:
+                return {
+                    "reason": "out_of_range_level",
+                    "response": f"{control.capitalize()} must be between 0 and 100 percent. What value should I use?",
+                }
+    return None
+
+
 def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = None,
                        multi_step_mode: bool = False):
     """
@@ -1200,6 +1246,15 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
             "status": "clarification_required",
             "reason": task_clarification["reason"],
             "response": task_clarification["response"],
+            "truncated": False,
+        }
+    numeric_clarification = _numeric_level_clarification(query)
+    if numeric_clarification:
+        return {
+            "route": "unresolved_tool_request",
+            "status": "clarification_required",
+            "reason": numeric_clarification["reason"],
+            "response": numeric_clarification["response"],
             "truncated": False,
         }
     comparison = compare_if_requested(query, tool_registry)
