@@ -1,0 +1,140 @@
+[
+  {
+    "query": "Find my notes about battery replacement and check current RAM.",
+    "expected_route": "multi_agent",
+    "expected_status": "success",
+    "expected_calls": ["search_notes", "ram_status"],
+    "expected_source": "notes",
+    "expected_scope": "all",
+    "expected_retrieval_status": "found",
+    "response_contains": ["Saved note #", "Battery replacement", "Current RAM (ram_status)"]
+  },
+  {
+    "query": "Search my conversation history for backup plan in the previous session and check current disk space.",
+    "expected_route": "multi_agent",
+    "expected_status": "success",
+    "expected_calls": ["search_conversation_history", "disk_usage"],
+    "expected_source": "conversation_history",
+    "expected_scope": "previous_session",
+    "expected_retrieval_status": "found",
+    "response_contains": ["Historical conversation #", "Backup planning", "Current disk space (disk_usage)"]
+  },
+  {
+    "query": "Search my conversations for battery in this session and check current RAM.",
+    "expected_route": "multi_agent",
+    "expected_status": "success",
+    "expected_calls": ["search_conversation_history", "ram_status"],
+    "expected_source": "conversation_history",
+    "expected_scope": "current_session",
+    "expected_retrieval_status": "found",
+    "response_contains": ["Historical conversation #", "Current RAM (ram_status)"]
+  },
+  {
+    "query": "Find my notes about unicorn protocol and check current RAM.",
+    "expected_route": "multi_agent",
+    "expected_status": "partial",
+    "expected_calls": ["search_notes"],
+    "expected_source": "notes",
+    "expected_scope": "all",
+    "expected_retrieval_status": "no_evidence",
+    "response_contains": ["No matching notes", "I did not check current RAM"]
+  },
+  {
+    "query": "Search my conversation history for unicorn protocol and check current RAM.",
+    "expected_route": "multi_agent",
+    "expected_status": "partial",
+    "expected_calls": ["search_conversation_history"],
+    "expected_source": "conversation_history",
+    "expected_scope": "all",
+    "expected_retrieval_status": "no_evidence",
+    "response_contains": ["No matching conversation history", "I did not check current RAM"]
+  },
+  {
+    "query": "Find my notes about battery and check current network status.",
+    "expected_route": "multi_agent",
+    "expected_status": "clarification_required",
+    "expected_calls": [],
+    "expected_source": null,
+    "expected_scope": null,
+    "response_contains": ["No tools were called"]
+  },
+  {
+    "query": "Don't search my notes for battery and check current RAM.",
+    "expected_route": "multi_agent",
+    "expected_status": "cancelled",
+    "expected_calls": [],
+    "expected_source": null,
+    "expected_scope": null,
+    "response_contains": ["No action taken"]
+  },
+  {
+    "query": "Find my notes about battery and delete a file after.",
+    "expected_route": "multi_agent",
+    "expected_status": "clarification_required",
+    "expected_calls": [],
+    "expected_source": null,
+    "expected_scope": null,
+    "response_contains": ["No tools were called"]
+  },
+  {
+    "query": "Find my notes about battery and check current RAM, then summarize what you found.",
+    "expected_route": "multi_agent",
+    "expected_status": "success",
+    "expected_calls": ["search_notes", "ram_status"],
+    "expected_source": "notes",
+    "expected_scope": "all",
+    "expected_retrieval_status": "found",
+    "response_contains": ["Saved note #", "Current RAM (ram_status)"]
+  },
+  {
+    "query": "Find my notes about battery and check current RAM.",
+    "live_failure": true,
+    "expected_route": "multi_agent",
+    "expected_status": "partial",
+    "expected_calls": ["search_notes", "ram_status"],
+    "expected_source": "notes",
+    "expected_scope": "all",
+    "expected_retrieval_status": "found",
+    "response_contains": ["Saved note #", "couldn't verify current RAM", "No comparison was made"]
+  },
+  {
+    "query": "Find my notes about battery and check current CPU information.",
+    "expected_route": "multi_agent",
+    "expected_status": "success",
+    "expected_calls": ["search_notes", "cpu_info"],
+    "expected_source": "notes",
+    "expected_scope": "all",
+    "expected_retrieval_status": "found",
+    "response_contains": ["Saved note #", "Current CPU information (cpu_info)", "ARM Cortex-A53"]
+  },
+  {
+    "query": "Find my notes about battery and check current CPU temperature.",
+    "expected_route": "multi_agent",
+    "expected_status": "success",
+    "expected_calls": ["search_notes", "cpu_temperature"],
+    "expected_source": "notes",
+    "expected_scope": "all",
+    "expected_retrieval_status": "found",
+    "response_contains": ["Saved note #", "Current CPU temperature (cpu_temperature)", "43 C"]
+  },
+  {
+    "query": "Find my notes about battery and check current system uptime.",
+    "expected_route": "multi_agent",
+    "expected_status": "success",
+    "expected_calls": ["search_notes", "system_uptime"],
+    "expected_source": "notes",
+    "expected_scope": "all",
+    "expected_retrieval_status": "found",
+    "response_contains": ["Saved note #", "Current system uptime (system_uptime)", "2 days"]
+  },
+  {
+    "query": "Find my notes about battery and check current battery status.",
+    "expected_route": "multi_agent",
+    "expected_status": "success",
+    "expected_calls": ["search_notes", "battery_status"],
+    "expected_source": "notes",
+    "expected_scope": "all",
+    "expected_retrieval_status": "found",
+    "response_contains": ["Saved note #", "Current battery status (battery_status)", "87%"]
+  }
+]

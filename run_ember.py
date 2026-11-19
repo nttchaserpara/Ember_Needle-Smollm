@@ -518,6 +518,17 @@ def _present_result(result, query, memory, reply_renderer, *, render_reply=True)
             if item.get("route") == "tool_call" and item.get("tool")
         )
         result["arguments"] = result.get("calls")
+    elif result.get("route") == "multi_agent":
+        display_response = result.get("response") or "I couldn't verify the combined result."
+        result["display_response"] = display_response
+        result["reply"] = {"text": display_response, "original": display_response,
+                           "candidate": "", "source": "original",
+                           "reason": ("verified_multi_agent_evidence" if result.get("success")
+                                      else "partial_multi_agent_result"),
+                           "elapsed_seconds": 0.0, "generation": None,
+                           "history_turn_ids": []}
+        result["tool"] = "+".join(call["name"] for call in result.get("calls", []))
+        result["arguments"] = result.get("calls")
     elif render_reply:
         renderer = reply_renderer if reply_renderer is not None else ReplyRenderer()
         reply = renderer.render(result, query=query, memory=memory)

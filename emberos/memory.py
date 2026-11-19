@@ -135,7 +135,7 @@ class ConversationMemory:
                 request, answer, route, tool, arguments, status,
                 result.get("success"), confidence,
                 query_clipped or response_clipped or args_clipped or bool(result.get("truncated")),
-                tool == "search_conversation_history" or route in {"memory_view", "disk_comparison"},
+                tool == "search_conversation_history" or route in {"memory_view", "disk_comparison", "multi_agent"},
             ))
 
     def search(self, query="", limit=5, *, scope="all", source_tool=None, include_scores=False):

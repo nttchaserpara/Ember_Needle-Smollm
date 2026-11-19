@@ -1622,8 +1622,10 @@ class EmberHTTPHandler(BaseHTTPRequestHandler):
         called_tools = [tool_name]
         if result.get("route") == "multi_tool_call":
             called_tools = [item.get("tool") for item in result.get("results", []) if item.get("tool")]
-        elif result.get("route") == "disk_comparison":
+        elif result.get("route") in {"disk_comparison", "multi_agent"}:
             called_tools = [call["name"] for call in result["calls"]]
+            if result.get("route") == "multi_agent":
+                tool_name = called_tools[0] if called_tools else ""
 
         # Block any result containing permanently blocked or unknown tools.
         # Confirmation-required tools are valid here because handle_request
@@ -1679,7 +1681,7 @@ class EmberHTTPHandler(BaseHTTPRequestHandler):
             "system_ram_percent": vm.percent,
         }
 
-        if result.get("route") == "disk_comparison":
+        if result.get("route") in {"disk_comparison", "multi_agent"}:
             meta["trace"] = result["trace"]
         _log_web_audit(client_ip, "POST /api/chat", query, tool_name, 200, f"{elapsed:.2f}s")
 

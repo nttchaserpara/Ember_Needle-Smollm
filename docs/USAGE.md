@@ -3,7 +3,7 @@
 Evaluation commands using `--cases` require your own local JSON cases; replace
 `/path/to/...` with an existing file. Evaluation datasets are not included.
 
-Diperbarui: 17 Oktober 2026. Panduan ini mengikuti kemampuan yang sudah ada,
+Diperbarui: 19 November 2026. Panduan ini mengikuti kemampuan yang sudah ada,
 termasuk batasan yang masih ditemukan. Semua prompt untuk Ember memakai bahasa
 Inggris. Jalankan satu permintaan, tunggu hasilnya, lalu lanjutkan.
 
@@ -322,6 +322,31 @@ alami. Untuk membaca catatan brightness yang tersimpan, gunakan:
 
 Catatan lama yang bertuliskan gagal tetap ditampilkan dengan status aslinya;
 perbaikan kode tidak mengubah riwayat menjadi sukses.
+
+### Gabungkan catatan lama dengan pemeriksaan perangkat saat ini
+
+Alur multi-agent umum yang masih terbatas ini menerima satu pencarian catatan
+atau riwayat, lalu satu pemeriksaan sistem yang hanya membaca data. Contoh di
+`You>`:
+
+```text
+Find my notes about battery replacement and check current RAM.
+```
+
+```text
+Search my conversation history for the backup plan in the previous session and check current disk space.
+```
+
+Pemeriksaan yang tersedia adalah RAM, disk, CPU, temperatur CPU, uptime, dan
+status baterai. Jika sumber lama tidak menemukan hasil, pemeriksaan perangkat
+tidak dijalankan. Permintaan gabungan yang ambigu atau meminta perubahan
+perangkat/file akan berhenti dan meminta perumusan yang lebih jelas.
+
+Di sini “agent” berarti beberapa peran Python yang berjalan berurutan: Planner,
+Retrieval, OS Action, dan Verifier. Mereka memakai kontrak tugas serta ID sumber
+yang diperiksa coordinator. Alur ini tidak menjalankan proses/model terpisah dan
+tidak menerima tool tindakan tulis. Untuk satu permintaan sederhana, router
+biasa tetap menangani permintaan tersebut.
 
 ### Pengaturan opsional
 

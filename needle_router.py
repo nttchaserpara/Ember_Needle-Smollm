@@ -31,6 +31,7 @@ import needle
 from emberos.undo import READ_ONLY_TOOLS
 from emberos.config import data_dir
 from emberos.disk_comparison import compare_if_requested
+from emberos.multi_agent import orchestrate_if_requested
 
 # ── Core file/system tools ──────────────────────────────────────────
 @needle.tool
@@ -1334,6 +1335,9 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
     comparison = compare_if_requested(query, tool_registry)
     if comparison is not None:
         return comparison
+    multi_agent = orchestrate_if_requested(query, tool_registry)
+    if multi_agent is not None:
+        return multi_agent
     directory_listing_call = _known_directory_listing_call(query)
     if directory_listing_call:
         try:

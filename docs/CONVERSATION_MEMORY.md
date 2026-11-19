@@ -409,6 +409,51 @@ links its result ID to the turn ID.
 Each full run took about 104.6 seconds; neither changed swap or left child
 processes. The evaluator used disposable history and a simulated disk result.
 
+### General bounded multi-agent read workflow
+
+`emberos/multi_agent.py` adds a second, more general workflow for an explicit
+English request that combines one note/history search with one current
+read-only system check. The fixed role sequence is Planner → Retrieval → OS
+Action → Verifier. The planner accepts an exact bounded request shape; it does
+not ask a language model to invent a plan. Retrieval validates the structured
+source, query, scope, hit fields, and record ID. OS Action proposes only one of
+six allowlisted reads (`disk_usage`, `ram_status`, `cpu_info`,
+`cpu_temperature`, `system_uptime`, or `battery_status`) with empty arguments.
+The active CLI or web registry validates and executes that proposal. The
+verifier labels the historical source separately from the current reading.
+
+The coordinator permits at most three handoffs after planning and checks a
+five-second time budget between synchronous steps. The check cannot interrupt
+a slow tool while it is running. Missing retrieval evidence stops before the
+system read; unsupported, ambiguous, negated, and write-action combinations
+stop without calling tools. No separate worker or reply-generation model is
+started, and multi-agent turns are excluded from later history recall.
+
+The English fixture has 14 requests. It covers notes and conversation history,
+previous/current session scope, no-match stops, live-read failures, all six
+allowlisted system reads, negation, unsupported facts, and a destructive
+compound request. `scripts/test_multi_agent.py` runs the fixture through both
+the CLI and Web registries, plus handoff-tampering checks and the request
+handler integration. It uses temporary databases and mocked system readings;
+it does not change user data or the host. The local development run passed
+all 28 registry/case combinations, three handoff-boundary checks, and both
+request-handler integration paths. On the local machine the `needle` package
+was stubbed so the test could also confirm recognized composite requests do
+not fall through to model routing; the Pi run below uses the project's venv.
+
+To repeat the functional suite and collect three process-tree resource samples
+on the Pi Zero 2 W:
+
+```sh
+./venv/bin/python scripts/test_multi_agent.py
+./venv/bin/python scripts/benchmark_multi_agent.py --output ~/emberos-baseline/multi-agent-general.json
+```
+
+The benchmark records sampled parent/child peak RSS, minimum system RAM
+available, swap delta, elapsed time, and child processes remaining. It reports
+the new workflow only; the previous revision had no equivalent general
+multi-agent path, so its resource figures would not be an equivalent workload.
+
 ### Relevance baseline for notes and conversation history
 
 From the repository root, run:
