@@ -286,10 +286,11 @@ process-tree RSS, 7,840.73 MiB minimum available RAM, zero swap change, an
 Raspberry Pi result. The existing 16 recall and routing checks and
 web/confirmation regressions also passed.
 
-On the Raspberry Pi Zero 2 W, all three runs of the same synthetic request
+On the Raspberry Pi Zero 2 W, all four runs of the same synthetic request
 failed at the baseline revision and passed with the disk comparison workflow.
-The third run validates `a2b75e4` before the structured proposal step added
-afterward; that latest step still needs its Pi run.
+Run 4 exercised the structured proposal at `816863c`. On the same device,
+the CLI and web registry checks passed, and the coordinator rejected the
+injected `run_shell` proposal before execution.
 
 | Run | Revision | Comparison | Request (s) | Full evaluator process (s) | Sampled peak process tree RSS (MiB) | Minimum system RAM available (MiB) | Swap delta (MiB) | Children remaining |
 | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -299,15 +300,15 @@ afterward; that latest step still needs its Pi run.
 | 2 | After (`4a98854`) | PASS | 0.0244 | 102.968 | 47.82 | 246.32 | 0 | 0 |
 | 3 | Before (`538e630`) | FAIL | 22.7119 | 124.396 | 52.77 | 241.58 | 0 | 0 |
 | 3 | After (`a2b75e4`) | PASS | 0.0223 | 102.785 | 47.54 | 243.56 | 0 | 0 |
+| 4 | Before (`538e630`) | FAIL | 22.5903 | 124.682 | 52.73 | 241.45 | 0 | 0 |
+| 4 | After (`816863c`) | PASS | 0.0239 | 101.698 | 47.53 | 245.84 | 0 | 0 |
 
 Request time covers the call to `handle_request` with the registry and
 synthetic history already initialized. The full process includes setup and
-teardown. The `538e630` revision predates this workflow, so these runs measure
-the end-to-end feature against its absent baseline; they are not a direct
-regression comparison between `4a98854` and `a2b75e4`. Each pair reported zero
-swap change and no observed child processes. Runs 1 and 2 used the same output
-path; the latest Pi report is saved as
-`~/emberos-baseline/disk-comparison-agents.json`.
+teardown. Revision `538e630` predates the comparison workflow. Each pair
+measures the full workflow against that common baseline. Runs 1 and 2 used
+the same output path. The Pi saved runs 3 and 4 in `~/emberos-baseline/` as
+`disk-comparison-agents.json` and `disk-comparison-proposal.json`, respectively.
 
 ### Relevance baseline for notes and conversation history
 
