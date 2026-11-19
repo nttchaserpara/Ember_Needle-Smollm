@@ -618,6 +618,25 @@ sense of “bike”. The 13 cases now serve as regression coverage.
 | After | 13/13 | 0.240 | 1.000 | 1.000 | 3/3 | 0 |
 
 The original and transfer suites retained their scores of 13/13 and 12/12.
+
+On the Raspberry Pi Zero 2 W, each suite ran once at baseline `11694f9`
+and once at `fad6e64`. Each pair below lists the baseline value first.
+
+| Pi suite | Checks passed | P@5 | MRR@5 | Recall@5 | Correct empty results |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Community | 11/13 → 13/13 | 0.200 → 0.240 | 0.800 → 1.000 | 0.800 → 1.000 | 3/3 → 3/3 |
+| Original | 13/13 → 13/13 | 0.291 → 0.291 | 1.000 → 1.000 | 1.000 → 1.000 | 2/2 → 2/2 |
+| Transfer | 12/12 → 12/12 | 0.222 → 0.222 | 1.000 → 1.000 | 1.000 → 1.000 | 3/3 → 3/3 |
+
+| Pi suite | Sampled peak process tree RSS (MiB) | Minimum system RAM available (MiB) | Full evaluator (s) |
+| --- | ---: | ---: | ---: |
+| Community | 15.82 → 15.89 | 265.84 → 271.42 | 0.926 → 0.843 |
+| Original | 15.86 → 15.92 | 272.24 → 266.92 | 0.968 → 0.953 |
+| Transfer | 15.87 → 15.92 | 268.16 → 258.70 | 0.921 → 0.870 |
+
+All six runs recorded zero scope leaks, zero swap change, and zero observed
+child processes remaining at exit.
+
 To repeat all three comparisons on the Pi, run the following from the repo root.
 
 ```sh
