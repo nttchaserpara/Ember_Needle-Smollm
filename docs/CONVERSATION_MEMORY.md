@@ -485,7 +485,35 @@ negation, a destructive compound request, an unsupported fact, and a simple
 legacy-router request. The evaluator uses temporary databases, mocked system
 readings, a pass-through reply renderer, and a registry guard that blocks
 anything outside the retrieval/live-read allowlist. The new source-ID guard
-and paired evaluator have not yet been run on the Pi. To run them there:
+was rerun on the Pi at `e08a088`; all 28 registry/case combinations, four
+handoff-boundary checks, and both request-handler integration paths passed.
+
+The paired baseline comparison also completed on the Pi. The baseline left
+both combined requests and the no-evidence request unresolved; it passed the
+simple request and three of four safe-stop cases. The new workflow completed
+both combined requests with correct delegation and source IDs, and passed all
+four safe-stop cases. Neither run made a false action or changed swap. Each
+revision ran once; the report is
+`~/emberos-baseline/multi-agent-comparison.json`.
+
+| Pi revision | Cases | Combined success | Delegation | Source IDs | Safe stops | False actions | Blocked proposals |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Before (`f64a710`) | 4/7 | 0/2 | 0/2 | 0/2 | 3/4 | 0 | 0 |
+| After (`e08a088`) | 7/7 | 2/2 | 2/2 | 2/2 | 4/4 | 0 | 0 |
+
+| Pi revision | Sampled peak process tree RSS (MiB) | Minimum available system RAM (MiB) | Swap delta (MiB) | Full evaluator (s) | Children remaining |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Before (`f64a710`) | 56.14 | 244.11 | 0 | 254.456 | none |
+| After (`e08a088`) | 53.28 | 246.20 | 0 | 117.971 | none |
+
+The evaluator reports elapsed time and process-tree RSS, but not Needle's
+context size or thread count. It used a pass-through reply renderer and did not
+start a SmolLM reply-generation worker. The baseline still routed queries
+through the existing Needle router. All tool actions in the evaluator were
+restricted to synthetic retrieval and mocked disk/RAM reads; the delete-file
+case did not execute a deletion.
+
+To repeat the functional suite and paired comparison on the Pi:
 
 ```sh
 ./venv/bin/python scripts/test_multi_agent.py
