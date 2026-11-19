@@ -153,6 +153,17 @@ def main():
             assert result["calls"] == [] and result["trace"][-1]["reason"] == "contract_violation", result
             print("PASS retrieval handoff must match the coordinator task ID")
 
+            def conflicting_source(task, execute):
+                result = AgentResult("retrieval", task.task_id, "found", evidence, source_id=1)
+                object.__setattr__(result, "source_id", 2)
+                return result
+
+            with patch("emberos.tools._get_notes_manager", return_value=notes), \
+                 patch("emberos.multi_agent.retrieve_evidence", side_effect=conflicting_source):
+                result = orchestrate_if_requested(fixture[0]["query"], registry)
+            assert result["calls"] == [] and result["trace"][-1]["reason"] == "source_id_mismatch", result
+            print("PASS conflicting evidence/source IDs stop before the live OS read")
+
             def forged_proposal(task):
                 return AgentResult("os_action", task.task_id, "proposed",
                                    {"name": "delete_file", "arguments": {}},

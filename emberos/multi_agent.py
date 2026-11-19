@@ -398,9 +398,21 @@ def orchestrate_if_requested(query, registry):
     except (TypeError, ValueError):
         retrieval_result = AgentResult("retrieval", retrieval_task.task_id,
                                        "unavailable", reason="retrieval_tool_rejected")
+    source_conflict = (
+        isinstance(retrieval_result, AgentResult)
+        and retrieval_result.status == "found"
+        and (not isinstance(retrieval_result.output, RetrievedEvidence)
+             or retrieval_result.source_id != retrieval_result.output.record_id
+             or retrieval_result.output.source != plan.source
+             or type(retrieval_result.output.record_id) is not int
+             or retrieval_result.output.record_id < 1)
+    )
     if not _task_matches(retrieval_task, retrieval_result):
         retrieval_result = AgentResult("retrieval", retrieval_task.task_id,
                                        "unavailable", reason="contract_violation")
+    elif source_conflict:
+        retrieval_result = AgentResult("retrieval", retrieval_task.task_id,
+                                       "unavailable", reason="source_id_mismatch")
     trace.append(_trace(retrieval_task, retrieval_result, source=plan.source, scope=plan.scope))
     evidence = retrieval_result.output if retrieval_result.status == "found" else None
     if evidence is None:

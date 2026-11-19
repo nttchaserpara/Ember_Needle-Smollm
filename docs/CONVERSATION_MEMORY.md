@@ -441,6 +441,9 @@ all 28 registry/case combinations, three handoff-boundary checks, and both
 request-handler integration paths. On the local machine the `needle` package
 was stubbed so the test could also confirm recognized composite requests do
 not fall through to model routing; the Pi run below uses the project's venv.
+After adding the conflicting-source-ID guard, the local rerun passed the same
+28 registry/case combinations, four handoff-boundary checks, and both request
+handler integration paths.
 
 To repeat the functional suite and collect three process-tree resource samples
 on the Pi Zero 2 W:
@@ -470,6 +473,25 @@ and left no child processes running. The Pi saved the report to
 These measurements cover the synthetic fixture, temporary note/history
 databases, and mocked live readings. They do not measure a normal interactive
 request against physical system sensors.
+
+After that Pi run, the coordinator gained an explicit guard against a
+retrieval `source_id` that conflicts with the ID inside its evidence envelope.
+The local registry suite now includes this injected conflict and confirms the
+live system read is skipped. A paired seven-case evaluator,
+`scripts/evaluate_multi_agent.py`, and comparison runner,
+`scripts/benchmark_multi_agent_comparison.py`, were also added. They compare
+revision `f64a710` with the current code on two combined requests, no evidence,
+negation, a destructive compound request, an unsupported fact, and a simple
+legacy-router request. The evaluator uses temporary databases, mocked system
+readings, a pass-through reply renderer, and a registry guard that blocks
+anything outside the retrieval/live-read allowlist. The new source-ID guard
+and paired evaluator have not yet been run on the Pi. To run them there:
+
+```sh
+./venv/bin/python scripts/test_multi_agent.py
+./venv/bin/python scripts/benchmark_multi_agent_comparison.py --baseline f64a710 \
+  --output ~/emberos-baseline/multi-agent-comparison.json
+```
 
 ### Relevance baseline for notes and conversation history
 
