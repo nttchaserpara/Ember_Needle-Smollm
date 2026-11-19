@@ -378,6 +378,19 @@ and resource measurements for each full run:
   --output ~/emberos-baseline/disk-coordination.json
 ```
 
+The structured retrieval metadata added at `c78e662` expanded the history
+result contract. The retrieval specialist now validates the full envelope and
+requires its `record_id` to equal the handoff's `turn_id`; a mismatch stops
+before any live disk read. The provenance test exercises this handoff locally.
+To compare the updated contract with the pre-fix implementation on the Pi:
+
+```sh
+./venv/bin/python scripts/test_retrieval_provenance.py
+./venv/bin/python scripts/test_disk_comparison.py
+./venv/bin/python scripts/evaluate_disk_comparison.py --suite coordination \
+  --baseline c78e662 --output ~/emberos-baseline/disk-coordination-provenance.json
+```
+
 ### Relevance baseline for notes and conversation history
 
 From the repository root, run:
@@ -676,6 +689,22 @@ for suite in original transfer community; do
     --output "$HOME/emberos-baseline/retrieval-provenance-$suite.json" || break
 done
 ```
+
+The Pi Zero 2 W runs at `c78e662` preserved every ranking and scope result.
+All runs reported zero swap change and no child processes remaining. RSS rose
+by about 0.96 MiB; full evaluator duration changed by at most 0.010 s.
+
+| Suite | Revision | Checks | P@5 | MRR@5 | Recall@5 | Peak RSS (MiB) | Minimum available (MiB) | Swap (MiB) | Duration (s) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Original | Before (`dc7e982`) | 13/13 | 0.291 | 1.000 | 1.000 | 15.78 | 261.61 | 0 | 1.005 |
+| Original | After (`c78e662`) | 13/13 | 0.291 | 1.000 | 1.000 | 16.74 | 251.79 | 0 | 1.015 |
+| Transfer | Before (`dc7e982`) | 12/12 | 0.222 | 1.000 | 1.000 | 15.77 | 260.21 | 0 | 0.919 |
+| Transfer | After (`c78e662`) | 12/12 | 0.222 | 1.000 | 1.000 | 16.74 | 253.75 | 0 | 0.916 |
+| Community | Before (`dc7e982`) | 13/13 | 0.240 | 1.000 | 1.000 | 15.79 | 255.29 | 0 | 0.900 |
+| Community | After (`c78e662`) | 13/13 | 0.240 | 1.000 | 1.000 | 16.73 | 254.82 | 0 | 0.899 |
+
+These are single runs. The provenance envelope test also passed on the Pi, with
+no user database or real system action involved.
 
 ### English task slots and negation
 

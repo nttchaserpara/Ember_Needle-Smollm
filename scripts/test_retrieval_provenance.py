@@ -13,8 +13,10 @@ sys.path.insert(0, str(ROOT))
 def main():
     with TemporaryDirectory(prefix="ember-retrieval-provenance-") as temporary:
         os.environ["EMBER_DATA_DIR"] = temporary
+        from emberos.disk_comparison import AgentTask, compare_if_requested, retrieve_previous
         from emberos.memory import ConversationMemory
         from emberos.tools import ToolRegistry
+        from emberos.tools import ToolResult
         from use_cases.notes import NotesManager
 
         root = Path(temporary)
@@ -35,7 +37,7 @@ def main():
         )
         previous.record(
             "How much free disk space do I have?",
-            "Filesystem Size Used Avail Use% Mounted on\n/dev/root 28G 11G 16G 42% /",
+            "Drive    Size   Used   Free   Use%\n------------------------------------------\n/        100G   84G    16G   84%",
             {"route": "tool_call", "tool": "disk_usage", "arguments": {"path": "/"},
              "success": True, "status": "success"},
         )
@@ -76,6 +78,24 @@ def main():
         assert disk_result.data["turn_id"] == disk_result.data["results"][0]["record_id"], disk_result.data
         assert disk_result.data["tool"] == "disk_usage", disk_result.data
         assert disk_result.data["results"][0]["rank"] == 1, disk_result.data
+        retrieval_task = AgentTask("retrieval", "provenance-integration",
+                                   {"scope": "previous_session", "source_tool": "disk_usage"})
+        accepted = retrieve_previous(retrieval_task, lambda: disk_result)
+        assert accepted.status == "found" and accepted.source_id == disk_result.data["turn_id"], accepted
+
+        malformed_data = dict(disk_result.data)
+        malformed_data["results"] = [dict(disk_result.data["results"][0], record_id=999)]
+        malformed = ToolResult(True, result=disk_result.result, data=malformed_data)
+        rejected = retrieve_previous(retrieval_task, lambda: malformed)
+        assert rejected.status == "no_evidence", rejected
+
+        simulated_disk = "Drive    Size   Used   Free   Use%\n------------------------------------------\n/        100G   67G    33G   67%"
+        with patch.object(registry.get_tool("disk_usage"), "func",
+                          return_value=ToolResult(True, result=simulated_disk)):
+            comparison = compare_if_requested("Compare my current disk space with last time.", registry)
+        assert comparison["success"] and "16 GiB" in comparison["response"]
+        assert "33 GiB" in comparison["response"], comparison
+        assert [item["source_id"] for item in comparison["trace"][1:]] == [disk_result.data["turn_id"]] * 4
 
         empty = registry.execute_tool("search_conversation_history", {
             "query": "nonexistent topic", "scope": "previous_session", "source_tool": ""
@@ -85,7 +105,7 @@ def main():
         assert current.search("battery", scope="current_session") == []
         notes.close()
 
-    print("PASS note and history provenance, scores, ranks, no-match status and session scope")
+    print("PASS note/history provenance, scoped retrieval, and disk-agent handoff validation")
 
 
 if __name__ == "__main__":

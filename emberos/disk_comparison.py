@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from decimal import Decimal
+import math
 from types import MappingProxyType
 from uuid import uuid4
 import re
@@ -205,10 +206,28 @@ def retrieve_previous(task, read_previous):
         raise ValueError("retrieval specialist received a task for another role")
     result = read_previous()
     data = result.data or {}
-    if (not result.success or not isinstance(data, dict) or set(data) != {"source", "scope", "tool", "turn_id"}
+    expected_fields = {"source", "query", "scope", "status", "retrieval", "results", "turn_id", "tool"}
+    hits = data.get("results") if isinstance(data, dict) else None
+    hit_fields = {"source", "record_id", "title", "timestamp", "snippet", "score", "rank", "status",
+                  "record_status"}
+    hit = hits[0] if isinstance(hits, list) and len(hits) == 1 else None
+    score = hit.get("score") if isinstance(hit, dict) else None
+    if (not result.success or not isinstance(data, dict) or set(data) != expected_fields
             or data.get("scope") != task.payload["scope"]
             or data.get("source") != "conversation_history" or data.get("tool") != task.payload["source_tool"]
-            or type(data.get("turn_id")) is not int or data["turn_id"] < 1):
+            or data.get("query") != "" or data.get("status") != "matches"
+            or data.get("retrieval") != "matches"
+            or type(data.get("turn_id")) is not int or data["turn_id"] < 1
+            or not isinstance(hit, dict) or set(hit) != hit_fields
+            or hit.get("source") != "conversation_history"
+            or type(hit.get("record_id")) is not int or hit["record_id"] != data.get("turn_id")
+            or type(hit.get("rank")) is not int or hit["rank"] != 1 or hit.get("status") != "matched"
+            or not isinstance(hit.get("title"), str) or len(hit["title"]) > 200
+            or not isinstance(hit.get("timestamp"), str) or len(hit["timestamp"]) > 64
+            or not isinstance(hit.get("snippet"), str) or len(hit["snippet"]) > 240
+            or isinstance(score, bool) or not isinstance(score, (int, float))
+            or not math.isfinite(score) or score < 0
+            or not isinstance(hit.get("record_status"), str) or len(hit["record_status"]) > 64):
         return AgentResult("retrieval", task.task_id, "no_evidence", reason="source_or_scope_mismatch")
     reading = system_drive(result.result)
     if not reading:

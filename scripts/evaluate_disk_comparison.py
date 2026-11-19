@@ -81,6 +81,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--suite", choices=("single", "coordination"), default="single")
+    parser.add_argument("--baseline", help="Git revision for the before snapshot (suite default if omitted)")
     parser.add_argument("--worker-root", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.worker_root:
@@ -93,7 +94,7 @@ def main():
         return 0
 
     runs = {}
-    baseline = "cde1aef" if args.suite == "coordination" else BASELINE
+    baseline = args.baseline or ("cde1aef" if args.suite == "coordination" else BASELINE)
     with tempfile.TemporaryDirectory(prefix="ember-comparison-") as temp:
         previous = Path(temp) / "baseline"
         # Load only tracked Python sources, keeping the user's checkout and DB intact.
@@ -134,7 +135,8 @@ def main():
     args.output.write_text(json.dumps({"platform": platform.platform(), "python": platform.python_version(),
                                       "hardware": model.read_text().strip("\0\n") if model.exists() else platform.machine(),
                                       "context_tokens": None, "inference_threads": None,
-                                      "suite": args.suite, "query": QUERY if args.suite == "single" else None,
+                                      "suite": args.suite, "baseline": baseline,
+                                      "query": QUERY if args.suite == "single" else None,
                                       "mock_disk": True, "runs": runs}, indent=2) + "\n")
     print(f"Report: {args.output}")
     return 0 if runs["after"]["passed"] else 1
