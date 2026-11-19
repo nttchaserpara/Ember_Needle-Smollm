@@ -348,7 +348,7 @@ def compare_if_requested(query, registry):
         if isinstance(getattr(current_result, "status", ""), str) else "error",
     }, action_task.task_id)
     observation = observe_drive(observer_task)
-    if not _task_matches(observer_task, observation):
+    if not _task_matches(observer_task, observation) or observation.source_id != evidence.turn_id:
         trace.append({"role": "disk_observer", "task_id": observer_task.task_id,
                       "parent_task_id": observer_task.parent_task_id, "status": "invalid_result",
                       "reason": "contract_violation", "source_id": evidence.turn_id})
@@ -360,7 +360,7 @@ def compare_if_requested(query, registry):
     verifier_task = _new_task("verifier", {"evidence": evidence, "current": observation.output},
                               observer_task.task_id)
     verification = verify_comparison(verifier_task)
-    if not _task_matches(verifier_task, verification):
+    if not _task_matches(verifier_task, verification) or verification.source_id != evidence.turn_id:
         trace.append({"role": "verifier", "task_id": verifier_task.task_id,
                       "parent_task_id": verifier_task.parent_task_id, "status": "invalid_result",
                       "reason": "contract_violation", "source_id": evidence.turn_id})

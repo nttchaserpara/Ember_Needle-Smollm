@@ -340,6 +340,34 @@ measures the full workflow against that common baseline. Runs 1 and 2 used
 the same output path. The Pi saved runs 3 and 4 in `~/emberos-baseline/` as
 `disk-comparison-agents.json` and `disk-comparison-proposal.json`, respectively.
 
+### Measuring cooperation in disk comparisons
+
+The coordination suite runs ten labeled scenarios through the shared request
+handler with each of the CLI and web registries. It uses disposable history
+and simulated disk readings. Two scenarios permit a comparison, seven require
+stopping, and one asks for history directly. Two of the stop scenarios inject
+a specialist result with a valid task ID but a different history ID.
+
+| Measure on Linux x86-64 | Baseline `cde1aef` | With observer and verifier source checks |
+| --- | ---: | ---: |
+| Cases meeting all expectations | 16/20 | 20/20 |
+| Correct route, role order and linked task IDs | 18/20 | 20/20 |
+| Completed comparisons, including the expected answer and tool sequence | 4/4 | 4/4 |
+| Correct source IDs and cited readings on answerable comparisons | 4/4 | 4/4 |
+| Safe stops with the expected tool sequence and response | 10/14 | 14/14 |
+
+The baseline produced an answer in both injected conflicts on both registries.
+The coordinator now stops at the first inconsistent source ID. The observer
+conflict also ends the workflow before delegation to the verifier.
+
+To repeat this comparison on the Pi and record per-case traces, request times,
+and resource measurements for each full run:
+
+```sh
+./venv/bin/python scripts/evaluate_disk_comparison.py --suite coordination \
+  --output ~/emberos-baseline/disk-coordination.json
+```
+
 ### Relevance baseline for notes and conversation history
 
 From the repository root, run:

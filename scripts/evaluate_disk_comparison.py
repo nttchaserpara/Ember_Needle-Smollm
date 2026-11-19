@@ -80,18 +80,24 @@ def worker(directory, report):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--suite", choices=("single", "coordination"), default="single")
     parser.add_argument("--worker-root", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.worker_root:
         sys.path.insert(0, str(args.worker_root))
-        worker(args.output.parent, args.output)
+        if args.suite == "coordination":
+            from disk_coordination_cases import evaluate
+            args.output.write_text(json.dumps(evaluate(QUERY, table, run_case)))
+        else:
+            worker(args.output.parent, args.output)
         return 0
 
     runs = {}
+    baseline = "cde1aef" if args.suite == "coordination" else BASELINE
     with tempfile.TemporaryDirectory(prefix="ember-comparison-") as temp:
         previous = Path(temp) / "baseline"
         # Load only tracked Python sources, keeping the user's checkout and DB intact.
-        archive = subprocess.check_output(["git", "archive", BASELINE], cwd=ROOT)
+        archive = subprocess.check_output(["git", "archive", baseline, "--", "*.py"], cwd=ROOT)
         with tarfile.open(fileobj=BytesIO(archive)) as files:
             for item in files:
                 if item.isfile() and item.name.endswith(".py"):
@@ -104,16 +110,23 @@ def main():
             report = directory / "case.json"
             environment = {**os.environ, "EMBER_DATA_DIR": str(directory), "NEEDLE_TELEMETRY": "0"}
             stats = sample_job([sys.executable, "-B", str(Path(__file__).resolve()),
-                                "--worker-root", str(root), "--output", str(report)], root, env=environment)
+                                "--worker-root", str(root), "--suite", args.suite, "--output", str(report)], root, env=environment)
             if stats["exit_code"] or not report.exists():
                 raise RuntimeError(f"{label} evaluator did not complete: {stats}")
-            rev = BASELINE if label == "before" else "HEAD"
+            rev = baseline if label == "before" else "HEAD"
             commit = subprocess.check_output(["git", "rev-parse", rev], cwd=ROOT, text=True).strip()
             runs[label] = {"commit": commit, **json.loads(report.read_text()), **stats}
             result = runs[label]
+            if args.suite == "coordination":
+                for metric, counts in {"cases": result["cases"], **result["metrics"]}.items():
+                    print(f"{label} {commit[:7]} {metric}: {counts['passed']}/{counts['total']}")
+                for row in result["results"]:
+                    if not row["passed"]:
+                        print(f"FAIL {row['registry']} {row['case']}")
+            latency = f"request {result['request_seconds']} s, " if args.suite == "single" else ""
             print(f"{label} {commit[:7]}: {'PASS' if result['passed'] else 'FAIL'}, "
                   f"RSS {stats['peak_tree_rss_mib']} MiB, available min {stats['min_system_available_mib']} MiB, "
-                  f"swap delta {stats['system_swap_delta_mib']:+g} MiB, request {result['request_seconds']} s, "
+                  f"swap delta {stats['system_swap_delta_mib']:+g} MiB, {latency}"
                   f"full run {stats['elapsed_seconds']} s, children remaining {stats['observed_children_still_running']}",
                   flush=True)
     model = Path("/proc/device-tree/model")
@@ -121,7 +134,8 @@ def main():
     args.output.write_text(json.dumps({"platform": platform.platform(), "python": platform.python_version(),
                                       "hardware": model.read_text().strip("\0\n") if model.exists() else platform.machine(),
                                       "context_tokens": None, "inference_threads": None,
-                                      "query": QUERY, "mock_disk": True, "runs": runs}, indent=2) + "\n")
+                                      "suite": args.suite, "query": QUERY if args.suite == "single" else None,
+                                      "mock_disk": True, "runs": runs}, indent=2) + "\n")
     print(f"Report: {args.output}")
     return 0 if runs["after"]["passed"] else 1
 
