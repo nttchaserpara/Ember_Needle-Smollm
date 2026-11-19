@@ -348,7 +348,9 @@ and simulated disk readings. Two scenarios permit a comparison, seven require
 stopping, and one asks for history directly. Two of the stop scenarios inject
 a specialist result with a valid task ID but a different history ID.
 
-| Measure on Linux x86-64 | Baseline `cde1aef` | With observer and verifier source checks |
+The Linux x86-64 and Raspberry Pi Zero 2 W runs produced the same counts.
+
+| Measure on each device | Baseline `cde1aef` | With source checks (`c33e3aa`) |
 | --- | ---: | ---: |
 | Cases meeting all expectations | 16/20 | 20/20 |
 | Correct route, role order and linked task IDs | 18/20 | 20/20 |
@@ -359,6 +361,14 @@ a specialist result with a valid task ID but a different history ID.
 The baseline produced an answer in both injected conflicts on both registries.
 The coordinator now stops at the first inconsistent source ID. The observer
 conflict also ends the workflow before delegation to the verifier.
+
+The Pi ran the full suite once per revision and saved the results in
+`~/emberos-baseline/disk-coordination.json`.
+
+| Pi revision | Sampled peak process tree RSS (MiB) | Minimum system RAM available (MiB) | Swap delta (MiB) | Full evaluator (s) | Observed children remaining |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Before (`cde1aef`) | 49.53 | 238.16 | 0 | 104.528 | 0 |
+| After (`c33e3aa`) | 49.47 | 243.52 | 0 | 104.182 | 0 |
 
 To repeat this comparison on the Pi and record per-case traces, request times,
 and resource measurements for each full run:
