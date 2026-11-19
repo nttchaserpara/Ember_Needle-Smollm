@@ -768,14 +768,44 @@ at confidence 0.1764, so the request abstained despite its literal level. A
 targeted grounding rule now preserves the literal level when Needle proposes a
 volume tool for a single explicit absolute command. Conflicting non-volume tools
 and compound requests still abstain. The mock-confidence test passes 4/4 cases
-and the local numeric fixture remains 9/9. Recheck this fix on the Pi against
-`ffb943c`:
+and the local numeric fixture remains 9/9. The Pi retest confirmed the fix:
 
-```sh
-./venv/bin/python scripts/benchmark_nlp_slots.py --baseline ffb943c \
-  --cases scripts/fixtures/nlp_numeric_slots_en.json \
-  --output ~/emberos-baseline/nlp-numeric-confidence.json
-```
+| Pi revision | Expected routes and arguments | Unexpected actions | Failed valid requests |
+| --- | ---: | ---: | ---: |
+| `ffb943c` | 8/9 | 0 | 1 |
+| `a0b0e3f` | 9/9 | 0 | 0 |
+
+| Pi revision | Sampled peak process tree RSS | Minimum system RAM available | Swap delta | Full evaluator | Child processes remaining |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `ffb943c` | 56.16 MiB | 240.79 MiB | +0 MiB | 164.890 s | none |
+| `a0b0e3f` | 52.89 MiB | 239.88 MiB | +0 MiB | 65.188 s | none |
 
 The benchmark now prints each failing query and the model's proposed tool next
-to its summary, so any remaining Pi-only miss will be visible in the terminal.
+to its summary. These are single runs. Tool execution was stubbed, and the
+benchmark does not record inference context or thread counts.
+
+#### Task mutation references
+
+A five-case fixture checks explicit task IDs, missing IDs, and multiple possible
+IDs. A task mutation without an ID now asks for one; a request naming two IDs
+asks which single task to update. File names containing `task` and the existing
+bulk completed-task command remain outside this guard.
+
+On Linux, the baseline at `a0b0e3f` passed 1/5 cases and made two unsupported
+actions: it treated `task` as a file path and chose ID 17 from an ambiguous
+“17 or 18” request. Two other missing-ID requests fell through to a generic
+fallback instead of asking for an ID. The updated worktree passed 5/5 with no
+tool calls for requests needing clarification. The file-action suite remained
+9/9.
+
+Run the focused comparison on the Pi after pulling the update:
+
+```sh
+./venv/bin/python scripts/test_task_id_clarification.py
+./venv/bin/python scripts/benchmark_nlp_slots.py --baseline a0b0e3f \
+  --cases scripts/fixtures/nlp_task_ids_en.json \
+  --output ~/emberos-baseline/nlp-task-ids.json
+```
+
+Both evaluators replace execution with a recorder. The benchmark also records
+RSS, available system RAM, swap, duration and child-process cleanup.

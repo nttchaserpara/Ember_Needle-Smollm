@@ -1,0 +1,30 @@
+[
+  {
+    "query": "Complete task number 17.",
+    "expected": {"name": "complete_task", "arguments": {"task_id": 17}}
+  },
+  {
+    "query": "Complete the task.",
+    "expected": null,
+    "expected_route": "unresolved_tool_request",
+    "expected_reason": "missing_task_id"
+  },
+  {
+    "query": "Mark that task as done.",
+    "expected": null,
+    "expected_route": "unresolved_tool_request",
+    "expected_reason": "missing_task_id"
+  },
+  {
+    "query": "Remove the task from my list.",
+    "expected": null,
+    "expected_route": "unresolved_tool_request",
+    "expected_reason": "missing_task_id"
+  },
+  {
+    "query": "Complete task number 17 or 18.",
+    "expected": null,
+    "expected_route": "unresolved_tool_request",
+    "expected_reason": "ambiguous_task_id"
+  }
+]

@@ -1182,6 +1182,49 @@ def _task_slot_clarification(query: str) -> dict | None:
     return None
 
 
+_TASK_ID_MUTATION_REQUEST = re.compile(
+    r"^\s*(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:please\s+)?"
+    r"(?P<verb>complete|finish|mark|remove|delete)\b(?P<gap>.*?)"
+    r"\b(?<![./\\])tasks?\b(?![/\\]|\.[a-z0-9])",
+    re.IGNORECASE,
+)
+_TASK_ID_REFERENCE = re.compile(
+    r"\btask\s+(?:(?:number|no\.?)\s*)?(?:#\s*)?(\d+)\b|\b#\s*(\d+)\b",
+    re.IGNORECASE,
+)
+_ADDITIONAL_TASK_ID = re.compile(
+    r"\b(?:or|and)\s+(?:(?:task|number|no\.?)\s*)?(?:#\s*)?\d+\b",
+    re.IGNORECASE,
+)
+
+
+def _task_id_clarification(query: str) -> dict | None:
+    """Require one explicit task ID for complete/remove task commands."""
+    action = _TASK_ID_MUTATION_REQUEST.search(query)
+    if not action:
+        return None
+    if (action.group("verb").casefold() in {"remove", "delete"}
+            and re.search(r"\bfile\b", action.group("gap"), re.IGNORECASE)):
+        return None
+    if (action.group("verb").casefold() in {"remove", "delete"}
+            and re.search(r"\b(?:all|every|completed)\b", query, re.IGNORECASE)):
+        return None
+
+    ids = [value for match in _TASK_ID_REFERENCE.finditer(query)
+           for value in match.groups() if value]
+    if len(ids) > 1 or _ADDITIONAL_TASK_ID.search(query):
+        return {
+            "reason": "ambiguous_task_id",
+            "response": "I found more than one task ID. Which single task should I update?",
+        }
+    if not ids:
+        return {
+            "reason": "missing_task_id",
+            "response": "Please provide one task ID so I know which task to update.",
+        }
+    return None
+
+
 _NUMERIC_LEVEL_VALUE = (
     r"(?P<number>negative\s+\d+(?:\.\d+)?|[+-]?\d+(?:\.\d+)?)"
     r"(?:\s*(?P<unit>%|[a-z][a-z0-9/-]*))?(?=\s|[.!?,]|$)"
@@ -1250,6 +1293,15 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
                 "response": "Which file would you like to delete? Please give its name or path."}
     if _NEGATED_TASK_ACTION.search(query):
         return {"route": "no_action", "reason": "negated_request", "response": "No action taken."}
+    task_id_clarification = _task_id_clarification(query)
+    if task_id_clarification:
+        return {
+            "route": "unresolved_tool_request",
+            "status": "clarification_required",
+            "reason": task_id_clarification["reason"],
+            "response": task_id_clarification["response"],
+            "truncated": False,
+        }
     task_clarification = _task_slot_clarification(query)
     if task_clarification:
         return {

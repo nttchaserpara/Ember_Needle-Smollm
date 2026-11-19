@@ -114,7 +114,7 @@ def main():
                 reason = (row.get("response") or {}).get("reason")
                 print(
                     f"{label} failed case: {row['query']} | expected={row['expected']} | "
-                    f"proposed={proposed} | reason={reason}",
+                    f"proposed={proposed} | executed={row['calls']} | reason={reason}",
                     flush=True,
                 )
     print(f"Report: {args.output}")

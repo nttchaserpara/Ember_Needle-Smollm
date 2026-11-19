@@ -118,6 +118,9 @@ Add a task called 'submit the grant application' due 2026-12-05 with priority hi
 Complete task number 17
 ```
 
+Penyelesaian atau penghapusan task harus menyebut satu ID. Jika ID tidak ada
+atau lebih dari satu disebut, Ember meminta ID yang tepat sebelum bertindak.
+
 Tanggal natural seperti `Friday` disimpan sebagai teks, tidak dihitung ulang
 menjadi tanggal kalender. Jika tanggal saling bertentangan, format angka tanggal
 ambigu, tanggal ISO tidak valid, atau prioritas tidak termasuk `low`, `normal`,
@@ -128,6 +131,8 @@ Daftar bisa kosong. Sebelas contoh task-slot lulus pada evaluasi routing Pi di
 `f310f55`; sepuluh kasus tambahan untuk tanggal dan prioritas ambigu lulus di
 `dbaf02b`. Evaluator memakai pencatat pengganti, sehingga tidak mengubah daftar
 tugas. Variasi bahasa di luar contoh itu tetap perlu diuji.
+Sembilan contoh routing angka volume/brightness lulus di Pi pada `a0b0e3f`; uji
+tersebut juga memakai pencatat dan tidak mengubah perangkat.
 Sapaan seperti `hello` belum berarti tersedia chatbot percakapan umum dengan
 respons LLM.
 
