@@ -233,6 +233,15 @@ runs recorded zero executor calls and zero confirmation prompts across the
 seven negated or underspecified requests. The improvement was in the response
 to those requests.
 
+The Raspberry Pi Zero 2 W ran the same nine cases once per revision.
+Across the seven negated or underspecified requests, both revisions recorded
+zero false actions and zero unexpected confirmations.
+
+| Revision | Cases passed | Full evaluator (s) | Sampled peak process tree RSS (MiB) | Minimum system RAM available (MiB) | Swap delta (MiB) | Observed children remaining |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Before (`88b166b`) | 6/9 | 247.596 | 56.28 | 246.21 | 0 | 0 |
+| After (`9dcdda1`) | 9/9 | 175.090 | 55.01 | 247.30 | 0 | 0 |
+
 Run the same corpus against the baseline and current checkout on the Pi with
 `./venv/bin/python scripts/benchmark_file_actions.py --output ~/emberos-baseline/file-actions.json`.
 The report includes individual decisions and resource samples for each full
