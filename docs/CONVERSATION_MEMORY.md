@@ -762,3 +762,20 @@ The evaluator substitutes a recorder for tool execution; it will not change
 volume or brightness. This benchmark records process RSS, system RAM available,
 swap, duration and child-process cleanup, but not inference context or thread
 counts. These are single runs.
+
+The remaining Pi miss was `Change the volume to 25%`: Needle selected `set_volume`
+at confidence 0.1764, so the request abstained despite its literal level. A
+targeted grounding rule now preserves the literal level when Needle proposes a
+volume tool for a single explicit absolute command. Conflicting non-volume tools
+and compound requests still abstain. The mock-confidence test passes 4/4 cases
+and the local numeric fixture remains 9/9. Recheck this fix on the Pi against
+`ffb943c`:
+
+```sh
+./venv/bin/python scripts/benchmark_nlp_slots.py --baseline ffb943c \
+  --cases scripts/fixtures/nlp_numeric_slots_en.json \
+  --output ~/emberos-baseline/nlp-numeric-confidence.json
+```
+
+The benchmark now prints each failing query and the model's proposed tool next
+to its summary, so any remaining Pi-only miss will be visible in the terminal.

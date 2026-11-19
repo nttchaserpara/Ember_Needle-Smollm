@@ -1047,6 +1047,17 @@ def _fix_set_volume_misroute(calls: list[dict], query: str) -> list[dict]:
             fixed.append(call)
     return fixed
 
+
+def _known_absolute_volume_call(query: str) -> dict | None:
+    """Extract the literal level from an explicit, absolute volume command."""
+    if (_RELATIVE_VOLUME_RE.search(query)
+            or re.search(r"\b(?:and|then|also|after\s+that)\b", query, re.IGNORECASE)):
+        return None
+    match = _SET_VOLUME_CLAUSE_RE.search(query)
+    if not match:
+        return None
+    return {"name": "set_volume", "arguments": {"level": int(match.group(1))}}
+
 # ── RAM-status confusion guard ───────────────────────────────────────────────
 
 _RAM_STATUS_CLAUSE_RE = re.compile(
@@ -1299,6 +1310,7 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
                              tool_registry)
 
     known_file_reference_call = _known_file_reference_call(query)
+    known_volume_call = _known_absolute_volume_call(query)
     known_call = known_file_reference_call or _known_intent_call(query)
     history_requested = False
     # Intent separation must not disappear when history storage is disabled.
@@ -1364,6 +1376,17 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
                 "response": "No action taken.", "reason": "negated_request", "truncated": False}
     if validation.get("ungrounded"):
         model_calls = result.get("function_calls") or []
+        if (known_volume_call and len(model_calls) == 1
+                and model_calls[0].get("name") in {"set_volume", "volume_up", "volume_down"}):
+            try:
+                tool_registry.validate_arguments(
+                    known_volume_call["name"], known_volume_call["arguments"]
+                )
+                return _execute_call(
+                    known_volume_call, tool_registry, confidence=result.get("confidence")
+                )
+            except (TypeError, ValueError):
+                pass
         if (known_call and known_call["name"] in {"add_task", "complete_task", "remove_task"}
                 and len(model_calls) == 1
                 and model_calls[0].get("name") == known_call["name"]):
@@ -1415,7 +1438,11 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
                           "ungrounded_arguments")
 
     calls = result.get("function_calls") or []
-    calls = _fix_set_volume_misroute(calls, query)
+    if (known_volume_call and len(calls) == 1
+            and calls[0].get("name") in {"set_volume", "volume_up", "volume_down"}):
+        calls = [known_volume_call]
+    else:
+        calls = _fix_set_volume_misroute(calls, query)
     calls = _fix_ram_status_misroute(calls, query)
     if not history_requested and (
             not calls
@@ -1463,6 +1490,16 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
             try:
                 tool_registry.validate_arguments(known_call["name"], known_call["arguments"])
                 return _execute_call(known_call, tool_registry, confidence=result["confidence"])
+            except (TypeError, ValueError):
+                pass
+        if known_volume_call and calls[0].get("name") == "set_volume":
+            try:
+                tool_registry.validate_arguments(
+                    known_volume_call["name"], known_volume_call["arguments"]
+                )
+                return _execute_call(
+                    known_volume_call, tool_registry, confidence=result["confidence"]
+                )
             except (TypeError, ValueError):
                 pass
         return {
@@ -1532,6 +1569,8 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
         if path_alias and call.get("arguments", {}).get("path") != path_alias:
             return unresolved("I couldn't match the selected document to your file. Please state the file path again.", "unmatched_file_reference")
         call = known_call
+    elif known_volume_call and call.get("name") == "set_volume":
+        call = known_volume_call
     try:
         tool_registry.validate_arguments(call.get("name"), call.get("arguments"))
     except (TypeError, ValueError) as exc:

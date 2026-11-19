@@ -107,6 +107,16 @@ def main():
             f"remaining children {resources['observed_children_still_running']}",
             flush=True,
         )
+        for row in scores["results"]:
+            if not row["passed"]:
+                raw = row.get("raw_model_results") or [{}]
+                proposed = raw[-1].get("function_calls", []) if raw else []
+                reason = (row.get("response") or {}).get("reason")
+                print(
+                    f"{label} failed case: {row['query']} | expected={row['expected']} | "
+                    f"proposed={proposed} | reason={reason}",
+                    flush=True,
+                )
     print(f"Report: {args.output}")
     return 0 if runs["after"]["passed"] == runs["after"]["total"] else 1
 
