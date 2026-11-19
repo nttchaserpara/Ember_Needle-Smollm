@@ -119,8 +119,10 @@ Complete task number 17
 ```
 
 Tanggal natural seperti `Friday` disimpan sebagai teks, tidak dihitung ulang
-menjadi tanggal kalender. Penolakan eksplisit seperti `Do not add a task ...`
-tidak menjalankan tindakan.
+menjadi tanggal kalender. Jika tanggal saling bertentangan, format angka tanggal
+ambigu, tanggal ISO tidak valid, atau prioritas tidak termasuk `low`, `normal`,
+dan `high`, Ember meminta klarifikasi tanpa membuat task. Penolakan eksplisit
+seperti `Do not add a task ...` juga tidak menjalankan tindakan.
 
 Daftar bisa kosong. Sebelas contoh routing tugas berbahasa Inggris lulus pada
 evaluasi Pi di `f310f55`; evaluator memakai pencatat pengganti, sehingga tidak

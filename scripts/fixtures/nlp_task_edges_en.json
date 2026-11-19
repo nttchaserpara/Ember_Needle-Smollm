@@ -1,0 +1,58 @@
+[
+  {
+    "query": "Add a task called 'review the proposal' due next week.",
+    "expected": {"name": "add_task", "arguments": {"title": "review the proposal", "due_date": "next week", "priority": "normal"}}
+  },
+  {
+    "query": "Add a task called 'pay rent' due in two days.",
+    "expected": {"name": "add_task", "arguments": {"title": "pay rent", "due_date": "in two days", "priority": "normal"}}
+  },
+  {
+    "query": "Add a task called 'renew insurance' due Friday or Monday.",
+    "expected": null,
+    "expected_route": "unresolved_tool_request",
+    "expected_reason": "ambiguous_task_date"
+  },
+  {
+    "query": "Add a task called 'pay invoice' due sometime next week.",
+    "expected": null,
+    "expected_route": "unresolved_tool_request",
+    "expected_reason": "unsupported_task_date"
+  },
+  {
+    "query": "Add a task called 'submit report' with priority urgent.",
+    "expected": null,
+    "expected_route": "unresolved_tool_request",
+    "expected_reason": "unsupported_task_priority"
+  },
+  {
+    "query": "Add a task called 'prepare slides' with priority medium.",
+    "expected": null,
+    "expected_route": "unresolved_tool_request",
+    "expected_reason": "unsupported_task_priority"
+  },
+  {
+    "query": "Add a task called 'pay tax' due 2026-02-30.",
+    "expected": null,
+    "expected_route": "unresolved_tool_request",
+    "expected_reason": "invalid_task_date"
+  },
+  {
+    "query": "Add a task called 'renew insurance' due 05/12/2026.",
+    "expected": null,
+    "expected_route": "unresolved_tool_request",
+    "expected_reason": "ambiguous_task_date"
+  },
+  {
+    "query": "Add a task called 'renew insurance' due Friday or Monday with priority high.",
+    "expected": null,
+    "expected_route": "unresolved_tool_request",
+    "expected_reason": "ambiguous_task_date"
+  },
+  {
+    "query": "Add a task called 'pay rent' with priority P1.",
+    "expected": null,
+    "expected_route": "unresolved_tool_request",
+    "expected_reason": "unsupported_task_priority"
+  }
+]

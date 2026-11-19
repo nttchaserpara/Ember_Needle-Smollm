@@ -689,3 +689,28 @@ These are single runs. This routing benchmark does not record inference context
 or thread counts; those settings were not provided with the Pi output. The
 benchmark archives `e8228ac` from Git and runs that snapshot plus the current
 checkout with the same evaluator.
+
+#### Ambiguous and unsupported task slots
+
+A second, ten-case fixture covers `next week`, `in two days`, conflicting due dates,
+unspecified dates, unsupported priorities, invalid ISO dates, and numeric dates
+that can be read in more than one order. Invalid or ambiguous fields now stop
+the task route and ask for clarification; no tool is called. The new parser also
+accepts relative periods such as `next week` and `in two days` as text without
+converting them to calendar dates.
+
+On Linux, the focused fixture changed from 0/10 expected outcomes and eight
+unexpected task proposals at `f310f55` to 10/10 with no proposals on unclear
+requests. The original 11 task-slot cases remained 11/11, and the file-action
+regression suite remained 9/9 with zero false actions.
+
+To compare the ten new cases on the Pi, run:
+
+```sh
+./venv/bin/python scripts/benchmark_nlp_slots.py --baseline f310f55 \
+  --cases scripts/fixtures/nlp_task_edges_en.json \
+  --output ~/emberos-baseline/nlp-task-edges.json
+```
+
+This isolates the new routing behavior and records RSS, available system RAM,
+swap, elapsed time, and child-process cleanup. The Pi result is pending.

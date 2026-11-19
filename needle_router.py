@@ -22,6 +22,7 @@ Buat contoh pemakaian/test, lihat scripts/test_directory_listing.py.
 import json
 import os
 import re
+from datetime import date
 from pathlib import Path
 import platform
 
@@ -731,6 +732,23 @@ def _known_file_reference_call(query: str) -> dict | None:
     return {"name": tool, "arguments": {"path": reference}}
 
 
+_TASK_WEEKDAY_PATTERN = r"(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)"
+_TASK_DATE_BASE_PATTERN = (
+    r"(?:\d{4}-\d{2}-\d{2}|today|tomorrow|"
+    rf"(?:next|this)\s+(?:{_TASK_WEEKDAY_PATTERN}|week|weekend|month)|"
+    rf"{_TASK_WEEKDAY_PATTERN}|"
+    r"in\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:days?|weeks?|months?)|"
+    r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+    r"jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
+    r"\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s*\d{4})?)"
+)
+_TASK_DATE_VALUE_PATTERN = (
+    _TASK_DATE_BASE_PATTERN
+    + r"(?:\s+(?:at\s+(?:noon|midnight|morning|afternoon|evening|"
+    r"\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?))|morning|afternoon|evening))?"
+)
+
+
 def _known_intent_call(query: str) -> dict | None:
     """Handle explicit document commands and narrow OS phrases Needle confuses.
 
@@ -823,11 +841,7 @@ def _known_intent_call(query: str) -> dict | None:
             ).strip()
         due_date = ""
         due_match = re.search(
-            r"\s+\b(?:due(?:\s+on)?|by|on)\s+"
-            r"(?P<date>(?:\d{4}-\d{2}-\d{2}|today|tomorrow|"
-            r"(?:next|this)\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|"
-            r"monday|tuesday|wednesday|thursday|friday|saturday|sunday)"
-            r"(?:\s+at\s+(?:noon|midnight|\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)))?)"
+            rf"\s+\b(?:due(?:\s+on)?|by|on)\s+(?P<date>{_TASK_DATE_VALUE_PATTERN})"
             r"\s*[.!?]*$",
             title,
             re.IGNORECASE,
@@ -1077,6 +1091,85 @@ _NEGATED_TASK_ACTION = re.compile(
     re.IGNORECASE,
 )
 
+_TASK_CREATION_REQUEST = re.compile(
+    r"\b(?:add|create|make|new)\b.*?\btask\b|"
+    r"\b(?:remind\s+me\s+to|remember\s+to)\b",
+    re.IGNORECASE,
+)
+_TASK_PRIORITY_DECLARATION = re.compile(
+    r"\bwith\s+priority\s+(?P<with_priority>[a-z][a-z0-9-]*)\b|"
+    r"\bpriority\s*:\s*(?P<colon_priority>[a-z][a-z0-9-]*)\b|"
+    r"\bwith\s+(?P<reversed_priority>[a-z][a-z0-9-]*)\s+priority\b|"
+    r"\bpriority\s+(?P<common_unsupported>urgent|critical|medium|asap|highest|lowest)\b",
+    re.IGNORECASE,
+)
+_TASK_SUPPORTED_PRIORITY_TRAILER = re.compile(
+    r"\s+(?:with\s+)?priority\s*[:\s]+(?:low|normal|high)\s*[.!?]*$",
+    re.IGNORECASE,
+)
+_TASK_DATE_CLAUSE = re.compile(
+    r"\b(?:due(?:\s+on)?|by|on)\s+(?P<date>[^.!?\n]+)", re.IGNORECASE
+)
+_TASK_AMBIGUOUS_DATE = re.compile(
+    rf"\b(?:due(?:\s+on)?|by|on)\s+(?:{_TASK_DATE_VALUE_PATTERN})\s+or\s+"
+    rf"(?:{_TASK_DATE_VALUE_PATTERN})\s*[.!?]*$",
+    re.IGNORECASE,
+)
+_TASK_UNCLEAR_DATE_START = re.compile(
+    r"^(?:sometime\b|some\s+time\b|someday\b|at\s+some\s+point\b|"
+    r"maybe\b|around\b|soon\b|later\b|eventually\b|next\s+quarter\b|"
+    r"in\s+the\s+near\s+future\b)",
+    re.IGNORECASE,
+)
+
+
+def _task_slot_clarification(query: str) -> dict | None:
+    """Reject task slot values we cannot safely preserve or interpret."""
+    if not _TASK_CREATION_REQUEST.search(query):
+        return None
+    # Metadata words inside a quoted task title are content, not task slots.
+    unquoted = re.sub(r"'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"", " ", query)
+
+    priority_match = _TASK_PRIORITY_DECLARATION.search(unquoted)
+    if priority_match:
+        priority = next(group for group in priority_match.groups() if group is not None).lower()
+        if priority not in {"low", "normal", "high"}:
+            return {
+                "reason": "unsupported_task_priority",
+                "response": "Task priority must be low, normal, or high. Which priority should I use?",
+            }
+
+    date_scan = _TASK_SUPPORTED_PRIORITY_TRAILER.sub("", unquoted)
+    if _TASK_AMBIGUOUS_DATE.search(date_scan):
+        return {
+            "reason": "ambiguous_task_date",
+            "response": "Which of those dates should I use for the task?",
+        }
+
+    date_match = _TASK_DATE_CLAUSE.search(date_scan)
+    if date_match:
+        date_text = date_match.group("date").strip()
+        date_text = re.sub(r"\s+with\s+priority\s+[a-z][a-z-]*\b.*$", "", date_text, flags=re.I)
+        if _TASK_UNCLEAR_DATE_START.search(date_text):
+            return {
+                "reason": "unsupported_task_date",
+                "response": "I couldn't identify a specific due date. What date should I use?",
+            }
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_text):
+            try:
+                date.fromisoformat(date_text)
+            except ValueError:
+                return {
+                    "reason": "invalid_task_date",
+                    "response": "That date is not valid. What due date should I use?",
+                }
+        if re.fullmatch(r"\d{1,2}/\d{1,2}(?:/\d{2,4})?", date_text):
+            return {
+                "reason": "ambiguous_task_date",
+                "response": "That numeric date can mean more than one calendar date. Please use YYYY-MM-DD or spell out the date.",
+            }
+    return None
+
 
 def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = None,
                        multi_step_mode: bool = False):
@@ -1100,6 +1193,15 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
                 "response": "Which file would you like to delete? Please give its name or path."}
     if _NEGATED_TASK_ACTION.search(query):
         return {"route": "no_action", "reason": "negated_request", "response": "No action taken."}
+    task_clarification = _task_slot_clarification(query)
+    if task_clarification:
+        return {
+            "route": "unresolved_tool_request",
+            "status": "clarification_required",
+            "reason": task_clarification["reason"],
+            "response": task_clarification["response"],
+            "truncated": False,
+        }
     comparison = compare_if_requested(query, tool_registry)
     if comparison is not None:
         return comparison
