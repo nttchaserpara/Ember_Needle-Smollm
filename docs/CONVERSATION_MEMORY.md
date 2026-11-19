@@ -506,6 +506,21 @@ revision ran once; the report is
 | Before (`f64a710`) | 56.14 | 244.11 | 0 | 254.456 | none |
 | After (`e08a088`) | 53.28 | 246.20 | 0 | 117.971 | none |
 
+A real CLI smoke test was then run on the Pi at `e08a088` with
+`Search my conversation history for disk space and check current RAM.` Retrieval
+selected saved conversation #5 from `2026-09-23`, which contained a prior
+RAM/disk report. The answer labeled that as historical evidence, then reported
+the current RAM reading separately: 37.6% used and approximately 0.3 GB
+available. This used the Pi's actual history database and `ram_status` tool,
+unlike the mocked readings in the paired evaluator.
+
+| Pi CLI smoke test | Request duration | Ember RSS now | Sampled peak process tree RSS | Child RSS at peak | System RAM available | Ember process delta |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `e08a088` | 0.20 s | 43.6 MB | 43.6 MiB | 0.0 MiB | 259.5 MB of 416.2 MB | +2.5 MB |
+
+The same output reported whole-system usage of 156.6 MB. It did not report a
+swap delta or Needle thread/context counts.
+
 The evaluator reports elapsed time and process-tree RSS, but not Needle's
 context size or thread count. It used a pass-through reply renderer and did not
 start a SmolLM reply-generation worker. The baseline still routed queries
