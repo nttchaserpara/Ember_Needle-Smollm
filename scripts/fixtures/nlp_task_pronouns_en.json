@@ -1,0 +1,26 @@
+[
+  {
+    "query": "Complete it.",
+    "expected": null,
+    "expected_route": "unresolved_tool_request",
+    "expected_reason": "missing_task_id"
+  },
+  {
+    "query": "Mark it as done.",
+    "expected": null,
+    "expected_route": "unresolved_tool_request",
+    "expected_reason": "missing_task_id"
+  },
+  {
+    "query": "Finish the one we discussed.",
+    "expected": null,
+    "expected_route": "unresolved_tool_request",
+    "expected_reason": "missing_task_id"
+  },
+  {
+    "query": "Don't complete it.",
+    "expected": null,
+    "expected_route": "no_action",
+    "expected_reason": "negated_request"
+  }
+]

@@ -14,9 +14,13 @@ def main():
         ("Complete the task.", "missing_task_id"),
         ("Mark that task as done.", "missing_task_id"),
         ("Remove the task from my list.", "missing_task_id"),
+        ("Complete it.", "missing_task_id"),
+        ("Mark it as done.", "missing_task_id"),
+        ("Finish the one we discussed.", "missing_task_id"),
         ("Complete task number 17.", None),
         ("Complete task number 17 or 18.", "ambiguous_task_id"),
         ("Delete file task.txt", None),
+        ("Remove that file.", None),
         ("Delete all completed tasks.", None),
     ]
     for query, expected in cases:

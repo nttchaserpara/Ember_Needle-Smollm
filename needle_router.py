@@ -1188,6 +1188,12 @@ _TASK_ID_MUTATION_REQUEST = re.compile(
     r"\b(?<![./\\])tasks?\b(?![/\\]|\.[a-z0-9])",
     re.IGNORECASE,
 )
+_TASK_PRONOUN_MUTATION_REQUEST = re.compile(
+    r"^\s*(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:please\s+)?"
+    r"(?:(?:complete|finish)\s+(?:it|that\s+one|the\s+one(?:\s+we\s+discussed)?)|"
+    r"mark\s+(?:it|that\s+one)\s+(?:as\s+)?(?:done|complete))\b",
+    re.IGNORECASE,
+)
 _TASK_ID_REFERENCE = re.compile(
     r"\btask\s+(?:(?:number|no\.?)\s*)?(?:#\s*)?(\d+)\b|\b#\s*(\d+)\b",
     re.IGNORECASE,
@@ -1202,6 +1208,11 @@ def _task_id_clarification(query: str) -> dict | None:
     """Require one explicit task ID for complete/remove task commands."""
     action = _TASK_ID_MUTATION_REQUEST.search(query)
     if not action:
+        if _TASK_PRONOUN_MUTATION_REQUEST.search(query):
+            return {
+                "reason": "missing_task_id",
+                "response": "Please provide one task ID so I know which task to update.",
+            }
         return None
     if (action.group("verb").casefold() in {"remove", "delete"}
             and re.search(r"\bfile\b", action.group("gap"), re.IGNORECASE)):

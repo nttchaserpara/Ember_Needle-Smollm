@@ -809,3 +809,34 @@ Run the focused comparison on the Pi after pulling the update:
 
 Both evaluators replace execution with a recorder. The benchmark also records
 RSS, available system RAM, swap, duration and child-process cleanup.
+
+The Pi Zero 2 W comparison completed successfully: the baseline at `a0b0e3f`
+matched 1/5 cases and made two unexpected task actions; `0033ecf` matched all
+five with no unexpected actions or failed valid requests. The earlier unsafe
+actions were removed-task routing to `clear_completed_tasks` and choosing task
+17 from the ambiguous request for task 17 or 18.
+
+| Pi revision | Expected routes and arguments | Unexpected actions | Failed valid requests |
+| --- | ---: | ---: | ---: |
+| `a0b0e3f` | 1/5 | 2 | 0 |
+| `0033ecf` | 5/5 | 0 | 0 |
+
+| Pi revision | Sampled peak process tree RSS | Minimum system RAM available | Swap delta | Full evaluator | Child processes remaining |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `a0b0e3f` | 59.24 MiB | 241.85 MiB | +0 MiB | 237.469 s | none |
+| `0033ecf` | 54.30 MiB | 244.51 MiB | +0 MiB | 32.502 s | none |
+
+These are single runs. The recorder prevented real task changes, and no child
+processes remained. The benchmark does not report inference context or thread
+counts.
+
+A four-case follow-up fixture covers task pronouns and negation. Phrases such as
+`Complete it`, `Mark it as done`, and `Finish the one we discussed` now ask for
+one task ID before model routing; `Don't complete it` remains a no-action
+request. Verify the full router on the Pi with:
+
+```sh
+./venv/bin/python scripts/benchmark_nlp_slots.py --baseline 0033ecf \
+  --cases scripts/fixtures/nlp_task_pronouns_en.json \
+  --output ~/emberos-baseline/nlp-task-pronouns.json
+```
