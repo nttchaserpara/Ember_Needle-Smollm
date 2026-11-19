@@ -426,8 +426,9 @@ The coordinator permits at most three handoffs after planning and checks a
 five-second time budget between synchronous steps. The check cannot interrupt
 a slow tool while it is running. Missing retrieval evidence stops before the
 system read; unsupported, ambiguous, negated, and write-action combinations
-stop without calling tools. No separate worker or reply-generation model is
-started, and multi-agent turns are excluded from later history recall.
+stop without calling tools. This path does not invoke Needle to plan or rewrite
+its answer; the application still initializes its existing router as usual.
+Multi-agent turns are excluded from later history recall.
 
 The English fixture has 14 requests. It covers notes and conversation history,
 previous/current session scope, no-match stops, live-read failures, all six
@@ -453,6 +454,22 @@ The benchmark records sampled parent/child peak RSS, minimum system RAM
 available, swap delta, elapsed time, and child processes remaining. It reports
 the new workflow only; the previous revision had no equivalent general
 multi-agent path, so its resource figures would not be an equivalent workload.
+
+At `0c520c9`, the Pi Zero 2 W passed all 28 registry/case combinations, all
+three handoff-boundary checks, and both request-handler integration paths.
+All three benchmark processes exited successfully, reported zero swap change,
+and left no child processes running. The Pi saved the report to
+`~/emberos-baseline/multi-agent-general.json`.
+
+| Run | Sampled peak process tree RSS (MiB) | Minimum available system RAM (MiB) | Swap delta (MiB) | Full suite (s) | Children remaining |
+| ---: | ---: | ---: | ---: | ---: | --- |
+| 1 | 49.82 | 246.21 | 0 | 107.730 | none |
+| 2 | 49.82 | 246.71 | 0 | 107.990 | none |
+| 3 | 49.79 | 247.69 | 0 | 106.729 | none |
+
+These measurements cover the synthetic fixture, temporary note/history
+databases, and mocked live readings. They do not measure a normal interactive
+request against physical system sensors.
 
 ### Relevance baseline for notes and conversation history
 
