@@ -217,6 +217,27 @@ Run the corpus and integration checks on the Pi with:
 ./venv/bin/python scripts/test_explicit_history.py
 ```
 
+### English file requests and missing targets
+
+The nine cases in `scripts/fixtures/file_action_language.json` exercise the
+shared request handler. Each starts a fresh session with one synthetic file
+available to the resolver. The evaluator uses the production routing and
+confirmation logic, records executor calls, and stubs reply generation.
+The two named-file controls require a read of the exact target and a pending
+delete confirmation for that target. Seven other cases require either
+acknowledging negation or asking which file the user means.
+
+On Linux x86-64, baseline `88b166b` passed 6/9. Three requests fell through
+to the generic fallback. With the missing-target check, all 9/9 passed. Both
+runs recorded zero executor calls and zero confirmation prompts across the
+seven negated or underspecified requests. The improvement was in the response
+to those requests.
+
+Run the same corpus against the baseline and current checkout on the Pi with
+`./venv/bin/python scripts/benchmark_file_actions.py --output ~/emberos-baseline/file-actions.json`.
+The report includes individual decisions and resource samples for each full
+evaluator process.
+
 ### Compare a saved disk report with a current reading
 
 In the CLI or web chat, ask `How much free disk space do I have?` to save a

@@ -1,0 +1,11 @@
+[
+  {"query": "Don't delete the file.", "expected": "negated"},
+  {"query": "Please do not delete file draft.txt.", "expected": "negated"},
+  {"query": "Never remove the file draft.txt.", "expected": "negated"},
+  {"query": "Delete it.", "expected": "clarify"},
+  {"query": "Remove that file.", "expected": "clarify"},
+  {"query": "Delete the file.", "expected": "clarify"},
+  {"query": "Please remove a file.", "expected": "clarify"},
+  {"query": "Read file draft.txt", "expected": "read", "file": "draft.txt"},
+  {"query": "Delete file draft.txt", "expected": "confirm", "file": "draft.txt"}
+]

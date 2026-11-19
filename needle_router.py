@@ -1047,6 +1047,13 @@ def _fix_ram_status_misroute(calls: list[dict], query: str) -> list[dict]:
             fixed.append(call)
     return fixed
 
+_DELETE_WITHOUT_TARGET = re.compile(
+    r"(?:please\s+)?(?:(?:can|could|would)\s+you\s+)?"
+    r"(?P<negation>(?:do\s+not|don['’]t|never)\s+)?(?:delete|remove)\s+"
+    r"(?:(?:the|a|my)\s+)?file\s*[.!?]?", re.I
+)
+
+
 def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = None,
                        multi_step_mode: bool = False):
     """
@@ -1061,6 +1068,12 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
     Every existing caller (benchmarks, evaluators) doesn't pass this, so
     nothing about them changes.
     """
+    missing_target = _DELETE_WITHOUT_TARGET.fullmatch(query.strip())
+    if missing_target:
+        if missing_target["negation"]:
+            return {"route": "no_action", "reason": "negated_request", "response": "No action taken."}
+        return {"route": "unresolved_tool_request", "status": "unresolved_reference",
+                "response": "Which file would you like to delete? Please give its name or path."}
     comparison = compare_if_requested(query, tool_registry)
     if comparison is not None:
         return comparison
