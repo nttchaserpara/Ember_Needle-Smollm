@@ -81,7 +81,7 @@ class NotesManager:
             return {"id": cur.lastrowid, "title": title, "content": content,
                     "timestamp": ts, "tags": tags or []}
 
-    def search(self, query: str, limit: int = 10) -> list[dict]:
+    def search(self, query: str, limit: int = 10, *, include_scores: bool = False) -> list[dict]:
         # A note has a searchable database row and an exported TXT file. The
         # file can be removed outside Ember, so remove stale rows before every
         # search instead of returning notes that no longer exist on disk.
@@ -103,7 +103,11 @@ class NotesManager:
                     [*params, limit],
                 ).fetchall()
                 if rows:
-                    return [self._row_to_dict(row[:5]) for row in rows]
+                    results = [self._row_to_dict(row[:5]) for row in rows]
+                    if include_scores:
+                        for rank, (result, row) in enumerate(zip(results, rows), start=1):
+                            result.update(score=float(row[5]), rank=rank)
+                    return results
             # Keep legacy substring lookup for fragments with no lexical hits,
             # and retain the existing empty-query listing.
             rows = self._conn.execute(
@@ -112,7 +116,12 @@ class NotesManager:
                 "ORDER BY id DESC LIMIT ?",
                 (f"%{query}%", f"%{query}%", f"%{query}%", limit),
             ).fetchall()
-        return [self._row_to_dict(r) for r in rows]
+        results = [self._row_to_dict(r) for r in rows]
+        if include_scores:
+            for rank, result in enumerate(results, start=1):
+                score = relevance(terms, result["title"], " ".join(result["tags"]), result["content"]) if terms else 0
+                result.update(score=float(score), rank=rank)
+        return results
 
     def prune_missing_exports(self) -> list[dict]:
         """Delete database notes whose exported TXT no longer exists."""

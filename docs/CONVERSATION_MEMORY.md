@@ -646,6 +646,37 @@ for suite in community original transfer; do
 done
 ```
 
+### Structured retrieval provenance
+
+Note search and conversation recall now return a shared metadata envelope in
+`ToolResult.data` while preserving their existing human-readable result text.
+The envelope reports source, query, scope and `matches`/`no_matches` status.
+Each hit includes its source-local record ID, title, timestamp, a bounded
+snippet, lexical score, rank and match status. History hits also preserve the
+saved turn status; the disk-report handoff retains its `turn_id` and tool name.
+No database schema or migration changed. History scope filtering and note
+ranking continue to use the existing search methods.
+
+The synthetic provenance test checks note and history results, the disk-report
+handoff, empty results and session isolation. The three existing relevance
+suites remained unchanged on Linux x86-64:
+
+| Suite | Before (`dc7e982`) | Updated worktree | P@5 | MRR@5 | Recall@5 | Scope leaks |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Original | 13/13 | 13/13 | 0.291 | 1.000 | 1.000 | 0 |
+| Transfer | 12/12 | 12/12 | 0.222 | 1.000 | 1.000 | 0 |
+| Community | 13/13 | 13/13 | 0.240 | 1.000 | 1.000 | 0 |
+
+Repeat the checks on the Pi Zero 2 W after pulling the implementation:
+
+```sh
+./venv/bin/python scripts/test_retrieval_provenance.py
+for suite in original transfer community; do
+  ./venv/bin/python scripts/benchmark_retrieval.py --baseline dc7e982 --suite "$suite" \
+    --output "$HOME/emberos-baseline/retrieval-provenance-$suite.json" || break
+done
+```
+
 ### English task slots and negation
 
 An 11-request English fixture now covers task titles, explicit due dates and
@@ -840,3 +871,22 @@ request. Verify the full router on the Pi with:
   --cases scripts/fixtures/nlp_task_pronouns_en.json \
   --output ~/emberos-baseline/nlp-task-pronouns.json
 ```
+
+The Pi Zero 2 W run completed at `dc7e982`: the old revision `0033ecf` matched
+1/4 cases, while the new guard matched all four. Neither revision proposed an
+unexpected action or failed a valid request. The baseline fell through to
+history selection for two pronoun-only task requests; the updated guard asks
+for an ID before that selection.
+
+| Pi revision | Expected routes and arguments | Unexpected actions | Failed valid requests |
+| --- | ---: | ---: | ---: |
+| `0033ecf` | 1/4 | 0 | 0 |
+| `dc7e982` | 4/4 | 0 | 0 |
+
+| Pi revision | Sampled peak process tree RSS | Minimum system RAM available | Swap delta | Full evaluator | Child processes remaining |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `0033ecf` | 55.77 MiB | 243.98 MiB | +0 MiB | 177.804 s | none |
+| `dc7e982` | 39.93 MiB | 253.78 MiB | +0 MiB | 1.322 s | none |
+
+These are single runs. Tool execution was stubbed; no task data changed. The
+benchmark does not report inference context or thread counts.

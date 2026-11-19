@@ -1,5 +1,6 @@
 """Small lexical ranker shared by SQLite notes and bounded conversation recall."""
 
+from dataclasses import asdict, dataclass
 import re
 
 
@@ -38,6 +39,60 @@ def normalized_words(text):
 
 def candidate_words(terms):
     return set().union(*(_ALIASES.get(term, {term}) for term in terms))
+
+
+def _snippet(text, query, limit=240):
+    compact = re.sub(r"\s+", " ", str(text)).strip()
+    if len(compact) <= limit:
+        return compact
+    folded = compact.casefold()
+    positions = [folded.find(term) for term in normalized_words(query) if folded.find(term) >= 0]
+    start = max(0, min(positions) - limit // 4) if positions else 0
+    end = min(len(compact), start + limit)
+    if start and start < end:
+        boundary = compact.find(" ", max(0, start - 1), min(end, start + 24))
+        if boundary >= 0:
+            start = boundary + 1
+    if end < len(compact):
+        boundary = compact.rfind(" ", max(start, end - 24), end)
+        if boundary > start + limit // 2:
+            end = boundary
+    return ("…" if start else "") + compact[start:end].strip() + ("…" if end < len(compact) else "")
+
+
+@dataclass(frozen=True)
+class RetrievalHit:
+    """One provenance-bearing result shared by note and history retrieval."""
+
+    source: str
+    record_id: int
+    title: str
+    timestamp: str
+    snippet: str
+    score: float
+    rank: int
+    status: str = "matched"
+
+    def to_dict(self):
+        return asdict(self)
+
+
+def retrieval_hit(source, record_id, title, timestamp, text, score, rank, query="", *, record_status=None):
+    hit = RetrievalHit(
+        source=str(source), record_id=int(record_id), title=str(title)[:200],
+        timestamp=str(timestamp or ""), snippet=_snippet(text, query),
+        score=float(score), rank=int(rank),
+    ).to_dict()
+    if record_status is not None:
+        hit["record_status"] = str(record_status)
+    return hit
+
+
+def retrieval_metadata(source, query, scope, results):
+    results = list(results)
+    status = "matches" if results else "no_matches"
+    return {"source": source, "query": query, "scope": scope,
+            "status": status, "retrieval": status, "results": results}
 
 
 def incidental_visual_reference(terms, request, arguments, answer):

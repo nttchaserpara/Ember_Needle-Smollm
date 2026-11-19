@@ -21,7 +21,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--suite", choices=("original", "transfer", "community"), default="original")
-    parser.add_argument("--baseline", choices=(BASELINE, "62e15ad", "14346cc", "9d92867", "11694f9"), default=BASELINE,
+    parser.add_argument("--baseline", choices=(BASELINE, "62e15ad", "14346cc", "9d92867", "11694f9", "dc7e982"), default=BASELINE,
                         help="Git revision of the retrieval implementation to score on the same suite")
     args = parser.parse_args()
     runs = {}

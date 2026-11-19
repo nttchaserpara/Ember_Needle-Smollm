@@ -10,7 +10,8 @@ import sqlite3
 from uuid import uuid4
 
 from emberos.outcomes import ToolOutput
-from emberos.retrieval import incidental_visual_reference, normalized_words, relevance, words
+from emberos.retrieval import (incidental_visual_reference, normalized_words,
+                               relevance, retrieval_hit, retrieval_metadata, words)
 
 
 MAX_TURNS = 1000
@@ -137,7 +138,7 @@ class ConversationMemory:
                 tool == "search_conversation_history" or route in {"memory_view", "disk_comparison"},
             ))
 
-    def search(self, query="", limit=5, *, scope="all", source_tool=None):
+    def search(self, query="", limit=5, *, scope="all", source_tool=None, include_scores=False):
         if not isinstance(query, str):
             raise ValueError("query must be text")
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 5:
@@ -192,7 +193,11 @@ class ConversationMemory:
                 del best[limit:]
                 if not terms and len(best) == limit:
                     break
-        return [candidate[2] for candidate in best]
+        results = [candidate[2] for candidate in best]
+        if include_scores:
+            for rank, (candidate, row) in enumerate(zip(best, results), start=1):
+                row.update(score=float(candidate[0][1]), rank=rank)
+        return results
 
     def reply_context(self, tool):
         """Small, complete past turns for the already selected tool.
@@ -213,9 +218,9 @@ class ConversationMemory:
         return [dict(row) for row in reversed(rows)]
 
     def recall(self, query="", limit=5, *, scope="all"):
-        rows = self.search(query, limit, scope=scope)
-        metadata = {"source": "conversation_history", "scope": scope, "query": query,
-                    "retrieval": "matches" if rows else "no_matches", "turn_ids": []}
+        rows = self.search(query, limit, scope=scope, include_scores=True)
+        metadata = retrieval_metadata("conversation_history", query, scope, [])
+        metadata["turn_ids"] = []
         if not rows:
             return ToolOutput(f"No matching conversation history was found in {HISTORY_SCOPES[scope]}.",
                               status="partial", data=metadata)
@@ -234,6 +239,12 @@ class ConversationMemory:
             remaining -= len(block.encode("utf-8"))
             blocks.append(block)
             metadata["turn_ids"].append(row["id"])
+            metadata["results"].append(retrieval_hit(
+                "conversation_history", row["id"], row["request"], row["created_at"],
+                f"{row['request']} {row['response']}", row["score"], row["rank"], query,
+                record_status=row["status"],
+            ))
+        metadata["status"] = metadata["retrieval"] = "matches" if metadata["results"] else "no_matches"
         return ToolOutput("".join(blocks), data=metadata)
 
     def clear(self):

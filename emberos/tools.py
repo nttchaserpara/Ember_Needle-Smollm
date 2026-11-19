@@ -17,6 +17,7 @@ from typing import Any, Callable, Optional
 from emberos.config import ROOT_DIR, log_dir
 from emberos.outcomes import ToolOutput
 from emberos.platform_detect import IS_LINUX_DESKTOP, IS_LINUX_HEADLESS, IS_WINDOWS
+from emberos.retrieval import retrieval_hit, retrieval_metadata
 from emberos.undo import READ_ONLY_TOOLS, UndoManager, UndoEntry
 
 logger = logging.getLogger("emberos.tools")
@@ -84,12 +85,19 @@ class ToolRegistry:
         if self.memory is None:
             return ToolOutput.failure("Conversation memory is disabled or unavailable.", status="unsupported")
         if source_tool == "disk_usage":
-            rows = self.memory.search(query, limit=1, scope=scope, source_tool=source_tool)
+            rows = self.memory.search(query, limit=1, scope=scope, source_tool=source_tool,
+                                      include_scores=True)
             if not rows:
-                return ToolOutput("No saved disk report in scope.", status="partial")
+                metadata = retrieval_metadata("conversation_history", query, scope, [])
+                metadata.update(turn_id=None, tool=source_tool)
+                return ToolOutput("No saved disk report in scope.", status="partial", data=metadata)
             row = rows[0]
-            return ToolOutput(row["response"], data={"source": "conversation_history", "scope": scope,
-                              "turn_id": row["id"], "tool": source_tool})
+            hit = retrieval_hit("conversation_history", row["id"], row["request"],
+                                row["created_at"], f"{row['request']} {row['response']}",
+                                row["score"], row["rank"], query, record_status=row["status"])
+            metadata = retrieval_metadata("conversation_history", query, scope, [hit])
+            metadata.update(turn_id=row["id"], tool=source_tool)
+            return ToolOutput(row["response"], data=metadata)
         return self.memory.recall(query, scope=scope)
 
     def _get_agent_context(self):
@@ -1699,11 +1707,15 @@ def _tool_create_note(title: str, content: str, tags: list = None) -> str:
 
 
 def _tool_search_notes(query: str) -> str:
-    results = _get_notes_manager().search(query)
+    results = _get_notes_manager().search(query, include_scores=True)
     if not results:
-        return f"No notes found matching '{query}'."
+        metadata = retrieval_metadata("notes", query, "all", [])
+        return ToolOutput(f"No notes found matching '{query}'.", status="partial", data=metadata)
     lines = [f"  #{n['id']} {n['title']}: {n['content']}" for n in results]
-    return f"Found {len(results)} note(s):\n" + "\n".join(lines)
+    hits = [retrieval_hit("notes", n["id"], n["title"], n["timestamp"], n["content"],
+                          n["score"], n["rank"], query) for n in results]
+    metadata = retrieval_metadata("notes", query, "all", hits)
+    return ToolOutput(f"Found {len(results)} note(s):\n" + "\n".join(lines), data=metadata)
 
 
 # ── Multi-document / synthesis tool implementations ──────────────────
