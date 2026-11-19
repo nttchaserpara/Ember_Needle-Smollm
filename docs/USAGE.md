@@ -122,9 +122,11 @@ Tanggal natural seperti `Friday` disimpan sebagai teks, tidak dihitung ulang
 menjadi tanggal kalender. Penolakan eksplisit seperti `Do not add a task ...`
 tidak menjalankan tindakan.
 
-Daftar bisa kosong. Routing tugas pernah berhasil pada evaluasi lokal, tetapi
-variasi kalimat dan perilaku di Pi tetap perlu diuji. Sapaan seperti `hello`
-belum berarti tersedia chatbot percakapan umum dengan respons LLM.
+Daftar bisa kosong. Sebelas contoh routing tugas berbahasa Inggris lulus pada
+evaluasi Pi di `f310f55`; evaluator memakai pencatat pengganti, sehingga tidak
+mengubah daftar tugas. Variasi bahasa di luar contoh itu tetap perlu diuji.
+Sapaan seperti `hello` belum berarti tersedia chatbot percakapan umum dengan
+respons LLM.
 
 Untuk brightness pada layar Windows yang mendukung WMI:
 

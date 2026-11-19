@@ -660,15 +660,32 @@ Linux run compared baseline `e8228ac` with the current worktree:
 
 | Revision | Expected routes and arguments | Unexpected actions | Failed valid requests |
 | --- | ---: | ---: | ---: |
-| Baseline | 4/11 | 1 | 6 |
-| Updated | 11/11 | 0 | 0 |
+| Local baseline | 4/11 | 1 | 6 |
+| Local updated worktree | 11/11 | 0 | 0 |
 
 To measure the same fixture, including process RSS, available system RAM, swap,
-and elapsed time, on the Pi after pulling the update:
+and elapsed time, on the Pi:
 
 ```sh
 ./venv/bin/python scripts/benchmark_nlp_slots.py --output ~/emberos-baseline/nlp-slots.json
 ```
 
-The benchmark archives `e8228ac` from Git and runs that snapshot plus the current
-checkout with the same evaluator. The physical Pi result is still pending.
+The Raspberry Pi Zero 2 W ran one evaluation per revision at `e8228ac` and
+`f310f55` with the same 11-case fixture. The baseline had one unexpected task
+action; the updated route passed all cases. Each run used a recorder in place of
+tool execution, so it changed no task data.
+
+| Pi revision | Expected routes and arguments | Unexpected actions | Failed valid requests |
+| --- | ---: | ---: | ---: |
+| `e8228ac` | 5/11 | 1 | 5 |
+| `f310f55` | 11/11 | 0 | 0 |
+
+| Pi revision | Sampled peak process tree RSS | Minimum system RAM available | Swap delta | Full evaluator | Child processes remaining |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `e8228ac` | 62.24 MiB | 235.57 MiB | +0 MiB | 431.102 s | none |
+| `f310f55` | 59.15 MiB | 236.78 MiB | +0 MiB | 209.948 s | none |
+
+These are single runs. This routing benchmark does not record inference context
+or thread counts; those settings were not provided with the Pi output. The
+benchmark archives `e8228ac` from Git and runs that snapshot plus the current
+checkout with the same evaluator.
