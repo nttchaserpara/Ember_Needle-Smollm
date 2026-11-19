@@ -391,6 +391,24 @@ To compare the updated contract with the pre-fix implementation on the Pi:
   --baseline c78e662 --output ~/emberos-baseline/disk-coordination-provenance.json
 ```
 
+The Pi Zero 2 W confirmed the metadata-contract regression and its fix. At
+`c78e662`, the retrieval specialist rejected the expanded envelope, so valid
+comparisons and later handoffs stopped. `822bc20` validates the envelope and
+links its result ID to the turn ID.
+
+| Pi revision | Cases | Delegation | Correct source IDs | Safe stops | Completed comparisons |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Before (`c78e662`) | 8/20 | 8/20 | 0/4 | 6/14 | 0/4 |
+| After (`822bc20`) | 20/20 | 20/20 | 4/4 | 14/14 | 4/4 |
+
+| Pi revision | Sampled peak process tree RSS (MiB) | Minimum system RAM available (MiB) | Swap delta (MiB) | Full evaluator (s) | Children remaining |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `c78e662` | 50.05 | 238.25 | 0 | 104.612 | 0 |
+| `822bc20` | 49.36 | 238.24 | 0 | 104.661 | 0 |
+
+Each full run took about 104.6 seconds; neither changed swap or left child
+processes. The evaluator used disposable history and a simulated disk result.
+
 ### Relevance baseline for notes and conversation history
 
 From the repository root, run:
