@@ -20,15 +20,15 @@ FILES = ["emberos/__init__.py", "emberos/memory.py",
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--suite", choices=("original", "transfer"), default="original")
-    parser.add_argument("--baseline", choices=(BASELINE, "62e15ad", "14346cc", "9d92867"), default=BASELINE,
-                        help="Compare against original retrieval or the first field-weighted ranker")
+    parser.add_argument("--suite", choices=("original", "transfer", "community"), default="original")
+    parser.add_argument("--baseline", choices=(BASELINE, "62e15ad", "14346cc", "9d92867", "11694f9"), default=BASELINE,
+                        help="Git revision of the retrieval implementation to score on the same suite")
     args = parser.parse_args()
     runs = {}
     with tempfile.TemporaryDirectory(prefix="ember-ranking-bench-") as tmp:
         root = Path(tmp)
         before = root / "baseline"
-        files = FILES + (["emberos/retrieval.py"] if args.baseline in {"62e15ad", "14346cc", "9d92867"} else [])
+        files = FILES + (["emberos/retrieval.py"] if args.baseline != BASELINE else [])
         for name in files:
             target = before / name
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -36,15 +36,15 @@ def main():
         # Run exactly the same evaluator and judgments against both implementations.
         (before / "scripts" / "fixtures").mkdir(parents=True)
         shutil.copyfile(ROOT / "scripts/evaluate_retrieval.py", before / "scripts/evaluate_retrieval.py")
-        if args.suite == "transfer":
-            fixture = Path("scripts/fixtures/retrieval_transfer.json")
+        if args.suite != "original":
+            fixture = Path(f"scripts/fixtures/retrieval_{args.suite}.json")
             shutil.copyfile(ROOT / fixture, before / fixture)
         for label, checkout, rev in (("before", before, args.baseline), ("after", ROOT, "HEAD")):
             path = root / f"{label}.json"
             resources = sample_job([sys.executable, "-B", "scripts/evaluate_retrieval.py",
                                     "--suite", args.suite, "--output", str(path)], checkout)
             report = json.loads(path.read_text(encoding="utf-8"))
-            if report["total"] != {"original": 13, "transfer": 12}[args.suite] or resources["exit_code"] != int(report["passed"] != report["total"]):
+            if report["total"] != {"original": 13, "transfer": 12, "community": 13}[args.suite] or resources["exit_code"] != int(report["passed"] != report["total"]):
                 raise RuntimeError(f"Incomplete {label} evaluator run")
             commit = subprocess.check_output(["git", "rev-parse", rev], cwd=ROOT, text=True).strip()
             runs[label] = {"commit": commit, "resources": resources, "evaluation": report}

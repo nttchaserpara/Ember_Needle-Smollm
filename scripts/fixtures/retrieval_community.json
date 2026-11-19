@@ -1,0 +1,38 @@
+{
+  "notes": [
+    ["keys", "Locker key pickup", "Collect the brass key at the library desk.", ["members"]],
+    ["helmets", "Bike helmet fitting", "Adjust the chin strap before the ride.", ["cycling"]],
+    ["spares", "Bike pump spares", "Take a valve adapter along.", ["cycling"]],
+    ["venue", "Reading room booking", "Reserve the upstairs room for Thursday.", ["library"]],
+    ["kiln", "Studio access", "Collect the studio key at reception.", ["members"]]
+  ],
+  "sessions": {
+    "archive": [
+      ["old_keys", "Review locker key pickup", "Last month the collection point was the foyer."]
+    ],
+    "previous_session": [
+      ["keys_chat", "Arrange locker key pickup", "The library desk has the brass key."],
+      ["helmets_chat", "Check bike helmet fitting", "Leave two fingers of space under the strap."]
+    ],
+    "current_session": [
+      ["room_chat", "Review reading room booking", "The upstairs room is booked for Thursday."],
+      ["spares_chat", "Inventory bike pump spares", "One valve adapter remains."],
+      ["locker_chat", "Inspect locker hinges", "Tighten the loose screw."]
+    ]
+  },
+  "cases": [
+    ["notes", null, "key pickup", "Instructions for collecting a locker key", ["keys"]],
+    ["notes", null, "where is the locker key pickup?", "Location for collecting the locker key", ["keys"]],
+    ["notes", null, "bicycle helmet", "How to fit the cycling helmet", ["helmets"]],
+    ["notes", null, "reading room booking", "Reservation of the upstairs reading room", ["venue"]],
+    ["notes", null, "cycling", "Equipment notes tagged for cycling", ["helmets", "spares"]],
+    ["notes", null, "rowing oar", "An unrepresented sport", []],
+    ["history", "all", "locker key pickup", "Earlier pickup arrangements across sessions", ["old_keys", "keys_chat"]],
+    ["history", "previous_session", "where is the locker key pickup?", "Pickup location discussed last session", ["keys_chat"]],
+    ["history", "previous_session", "bicycle helmet", "Earlier advice on fitting the cycling helmet", ["helmets_chat"]],
+    ["history", "current_session", "locker key pickup", "Pickup arrangements discussed in this session", []],
+    ["history", "current_session", "room booking", "The current reservation", ["room_chat"]],
+    ["history", "previous_session", "pump spares", "Pump parts discussed in the previous session", []],
+    ["history", "all", "valve adapter", "Which turn reported on a spare adapter", ["spares_chat"]]
+  ]
+}

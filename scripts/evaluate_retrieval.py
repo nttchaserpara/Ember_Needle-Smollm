@@ -134,11 +134,11 @@ def summarize(rows):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--suite", choices=("original", "transfer"), default="original")
+    parser.add_argument("--suite", choices=("original", "transfer", "community"), default="original")
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="ember-ir-") as temp:
-        if args.suite == "transfer":
-            fixture_path = Path(__file__).parent / "fixtures" / "retrieval_transfer.json"
+        if args.suite != "original":
+            fixture_path = Path(__file__).parent / "fixtures" / f"retrieval_{args.suite}.json"
             fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
             rows = evaluate(Path(temp), fixture["notes"], fixture["sessions"], fixture["cases"])
         else:

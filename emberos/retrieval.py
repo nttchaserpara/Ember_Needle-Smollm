@@ -10,6 +10,7 @@ _STYLE_INSTRUCTION = re.compile(
     r"(?:[a-z-]+\s+){0,5}[a-z-]+[.!]?", re.I,
 )
 _ALIASES = {
+    "bicycle": frozenset({"bicycle", "bicycles", "bike", "bikes"}),
     "ceramic": frozenset({"ceramic", "ceramics", "potter", "pottery", "clay"}),
     "kiln": frozenset({"kiln", "oven"}),
     "watering": frozenset({"irrigate", "irrigation", "water", "watering"}),

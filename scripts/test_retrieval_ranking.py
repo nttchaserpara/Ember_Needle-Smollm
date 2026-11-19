@@ -34,9 +34,14 @@ def main():
             notes.export_text(pottery)
             scholarship = notes.add("Scholarship deadline", "The application is due Friday.", ["education"])
             notes.export_text(scholarship)
+            rack = notes.add("Bike rack", "Parking for visitors.", ["transport"])
+            notes.export_text(rack)
+            engine = notes.add("Motorcycle rack", "Heavy-duty brackets.", ["transport"])
+            notes.export_text(engine)
 
             assert ids(notes, "voltage battery") == [7, aside["id"]]
             assert ids(notes, "electronics") == [7]
+            assert ids(notes, "bicycle rack") == [rack["id"]]
             assert ids(notes, "pottery oven") == [pottery["id"]]
             assert ids(notes, "grant due date") == [scholarship["id"]]
             assert notes.get_by_id(7) == original
@@ -48,6 +53,7 @@ def main():
                 notes._indexed = notes._prepare_search_index()
                 notes._conn.set_authorizer(None)
                 assert not notes._indexed
+                assert ids(notes, "bicycle rack") == [rack["id"]]
                 assert ids(notes, "voltage battery") == [7, aside["id"]]
             with notes._conn:
                 notes._conn.execute("UPDATE notes SET content = 'calibration' WHERE id = 7")
@@ -70,6 +76,8 @@ def main():
         assert current.search("voltage battery", limit=1, scope="current_session")[0]["response"] == "11 V"
         assert [r["response"] for r in current.search("battery", scope="previous_session")] == ["12 V"]
         assert current.search("wind turbine") == []
+        current.record("Count bicycles", "Four are parked outside.", {"status": "success"})
+        assert [r["request"] for r in current.search("bikes")] == ["Count bicycles"]
 
         art = ConversationMemory(root / "art.db")
         art.record("Review the fire drill poster", "Increase the font size.", {"status": "success"})

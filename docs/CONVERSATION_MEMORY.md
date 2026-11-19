@@ -601,3 +601,28 @@ With this change the additional fixture passed 10/12 locally. All three
 expected-empty queries returned no results. The positive-query MRR@5 stayed
 at 0.778, and the original fixture stayed at 11/13. To isolate this change on
 the Pi, pass `--baseline 62e15ad` when benchmarking each suite.
+
+### Retrieval on community topics
+
+At revision `11694f9`, a new English fixture tested 13 queries about library
+rooms, locker keys and cycling equipment in notes and three saved sessions.
+The first run passed 11/13. Both misses involved the same paraphrase:
+“bicycle helmet” against “bike helmet”, once in notes and once in history.
+The revision after that measurement treats bike and bicycle, including their
+regular plurals, as one search term. This lexical rule assumes the cycling
+sense of “bike”. The 13 cases now serve as regression coverage.
+
+| Linux x86-64, community suite | First hit or correct empty result | P@5 | MRR@5 | Recall@5 | Correct empty results | Scope leaks |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Before | 11/13 | 0.200 | 0.800 | 0.800 | 3/3 | 0 |
+| After | 13/13 | 0.240 | 1.000 | 1.000 | 3/3 | 0 |
+
+The original and transfer suites retained their scores of 13/13 and 12/12.
+To repeat all three comparisons on the Pi, run the following from the repo root.
+
+```sh
+for suite in community original transfer; do
+  ./venv/bin/python scripts/benchmark_retrieval.py --baseline 11694f9 --suite "$suite" \
+    --output "$HOME/emberos-baseline/ir-community-$suite.json" || break
+done
+```
