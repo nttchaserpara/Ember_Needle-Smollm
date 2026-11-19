@@ -797,8 +797,8 @@ def _known_intent_call(query: str) -> dict | None:
         return {"name": "list_tasks", "arguments": {"show_all": False}}
 
     add_task_match = re.search(
-        r"\b(?:add|create|new|make)\b.*?\btask\b(?:\s+(?:titled|called)\s+|[:\s]+)(.+)"
-        r"|\btask\s+(?:(?:titled|called)\s+|[:\s]+)(.+)"
+        r"\b(?:add|create|new|make)\b.*?\btask\b(?:\s+(?:titled|called|named)\s+|[:\s]+)(.+)"
+        r"|\btask\s+(?:(?:titled|called|named)\s+|[:\s]+)(.+)"
         r"|\bremind\s+me\s+to\s+(.+)"
         r"|\bremember\s+to\s+(.+)",
         query.strip(),
@@ -821,11 +821,26 @@ def _known_intent_call(query: str) -> dict | None:
                 title,
                 flags=re.IGNORECASE,
             ).strip()
+        due_date = ""
+        due_match = re.search(
+            r"\s+\b(?:due(?:\s+on)?|by|on)\s+"
+            r"(?P<date>(?:\d{4}-\d{2}-\d{2}|today|tomorrow|"
+            r"(?:next|this)\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|"
+            r"monday|tuesday|wednesday|thursday|friday|saturday|sunday)"
+            r"(?:\s+at\s+(?:noon|midnight|\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)))?)"
+            r"\s*[.!?]*$",
+            title,
+            re.IGNORECASE,
+        )
+        if due_match:
+            due_date = due_match.group("date").strip()
+            title = title[:due_match.start()].strip()
+        title = re.sub(r"^to\s+", "", title, flags=re.IGNORECASE)
         if len(title) >= 2 and title[0] == title[-1] and title[0] in {"'", '"'}:
             title = title[1:-1]
         title = title.strip().rstrip(".!?").strip()
         if title:
-            return {"name": "add_task", "arguments": {"title": title, "due_date": "", "priority": priority}}
+            return {"name": "add_task", "arguments": {"title": title, "due_date": due_date, "priority": priority}}
 
     if re.search(
         r"\b(?:ram|memory)\b.*?\b(?:status|usage|used|available|free)\b"
@@ -848,8 +863,9 @@ def _known_intent_call(query: str) -> dict | None:
 
     # Fix: "complete task N" / "mark task N done" → complete_task
     complete_match = re.search(
-        r"\b(?:complete|finish|done|mark(?:\s+as)?(?:\s+done|\s+complete)?)\b.*?\btask\b.*?(\d+)"
-        r"|\btask\b.*?(\d+).*?\b(?:complete|finish|done)\b",
+        r"\b(?:complete|finish|done|mark(?:\s+as)?(?:\s+done|\s+complete)?)\b.*?\btask\b"
+        r"\s+(?:(?:number|no\.?)\s*|#\s*)?(\d+)"
+        r"|\btask\b\s+(?:(?:number|no\.?)\s*|#\s*)?(\d+).*?\b(?:complete|finish|done)\b",
         normalized,
     )
     if complete_match:
@@ -858,8 +874,8 @@ def _known_intent_call(query: str) -> dict | None:
 
     # Fix: "remove/delete task N" → remove_task
     remove_match = re.search(
-        r"\b(?:remove|delete)\b.*?\btask\b.*?(\d+)"
-        r"|\btask\b.*?(\d+).*?\b(?:remove|delete)\b",
+        r"\b(?:remove|delete)\b.*?\btask\b\s+(?:(?:number|no\.?)\s*|#\s*)?(\d+)"
+        r"|\btask\b\s+(?:(?:number|no\.?)\s*|#\s*)?(\d+).*?\b(?:remove|delete)\b",
         normalized,
     )
     if remove_match:
@@ -1053,6 +1069,14 @@ _DELETE_WITHOUT_TARGET = re.compile(
     r"(?:(?:the|a|my)\s+)?file\s*[.!?]?", re.I
 )
 
+_NEGATED_TASK_ACTION = re.compile(
+    r"^\s*(?:(?:please\s+)?(?:do\s+not|don['’]t|never)\s+"
+    r"(?:add|create|make|remind|remember|complete|finish|mark|remove|delete)\b|"
+    r"(?:i\s+)?(?:do\s+not|don['’]t)\s+want\s+(?:you\s+)?to\s+"
+    r"(?:add|create|make|remind|remember|complete|finish|mark|remove|delete)\b)",
+    re.IGNORECASE,
+)
+
 
 def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = None,
                        multi_step_mode: bool = False):
@@ -1074,6 +1098,8 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
             return {"route": "no_action", "reason": "negated_request", "response": "No action taken."}
         return {"route": "unresolved_tool_request", "status": "unresolved_reference",
                 "response": "Which file would you like to delete? Please give its name or path."}
+    if _NEGATED_TASK_ACTION.search(query):
+        return {"route": "no_action", "reason": "negated_request", "response": "No action taken."}
     comparison = compare_if_requested(query, tool_registry)
     if comparison is not None:
         return comparison
@@ -1181,6 +1207,14 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
                 "response": "No action taken.", "reason": "negated_request", "truncated": False}
     if validation.get("ungrounded"):
         model_calls = result.get("function_calls") or []
+        if (known_call and known_call["name"] in {"add_task", "complete_task", "remove_task"}
+                and len(model_calls) == 1
+                and model_calls[0].get("name") == known_call["name"]):
+            try:
+                tool_registry.validate_arguments(known_call["name"], known_call["arguments"])
+                return _execute_call(known_call, tool_registry, confidence=result.get("confidence"))
+            except (TypeError, ValueError):
+                pass
         file_tools = {"read_file", "summarize_file", "delete_file"}
         ungrounded_fields = validation.get("ungrounded") or []
         only_file_path_ungrounded = bool(ungrounded_fields) and all(
@@ -1308,6 +1342,8 @@ def route_and_execute(query: str, tool_registry, *, diagnostics: dict | None = N
                 "token budget" in model_err
                 or "missing required parameter" in reasoning
                 or "no tool" in reasoning
+                or (known_call["name"] in {"complete_task", "remove_task"}
+                    and "task_id" in reasoning)
             )
             if should_rescue:
                 try:

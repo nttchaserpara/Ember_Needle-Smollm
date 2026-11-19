@@ -1,0 +1,54 @@
+[
+  {
+    "query": "Add a task called 'submit the grant application' due 2026-12-05 with priority high.",
+    "expected": {"name": "add_task", "arguments": {"title": "submit the grant application", "due_date": "2026-12-05", "priority": "high"}}
+  },
+  {
+    "query": "Remind me to return the library book by Friday.",
+    "expected": {"name": "add_task", "arguments": {"title": "return the library book", "due_date": "Friday", "priority": "normal"}}
+  },
+  {
+    "query": "Create a task named 'call the dentist' due next Tuesday with priority normal.",
+    "expected": {"name": "add_task", "arguments": {"title": "call the dentist", "due_date": "next Tuesday", "priority": "normal"}}
+  },
+  {
+    "query": "Add task to pick up the parcel by tomorrow at noon.",
+    "expected": {"name": "add_task", "arguments": {"title": "pick up the parcel", "due_date": "tomorrow at noon", "priority": "normal"}}
+  },
+  {
+    "query": "Mark task 42 as done.",
+    "expected": {"name": "complete_task", "arguments": {"task_id": 42}}
+  },
+  {
+    "query": "Complete task number 17.",
+    "expected": {"name": "complete_task", "arguments": {"task_id": 17}}
+  },
+  {
+    "query": "Complete task #18.",
+    "expected": {"name": "complete_task", "arguments": {"task_id": 18}}
+  },
+  {
+    "query": "Do not add a task to clean the garage by Friday.",
+    "expected": null,
+    "expected_route": "no_action",
+    "expected_reason": "negated_request"
+  },
+  {
+    "query": "Don't remind me to call the dentist.",
+    "expected": null,
+    "expected_route": "no_action",
+    "expected_reason": "negated_request"
+  },
+  {
+    "query": "Never complete task #42.",
+    "expected": null,
+    "expected_route": "no_action",
+    "expected_reason": "negated_request"
+  },
+  {
+    "query": "I don't want you to create a task to wash the car.",
+    "expected": null,
+    "expected_route": "no_action",
+    "expected_reason": "negated_request"
+  }
+]

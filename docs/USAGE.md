@@ -111,6 +111,17 @@ Untuk melihat daftar tugas yang sudah tersimpan:
 Show my pending tasks
 ```
 
+Penambahan task lebih jelas jika nama, tanggal, dan prioritas dipisahkan:
+
+```text
+Add a task called 'submit the grant application' due 2026-12-05 with priority high
+Complete task number 17
+```
+
+Tanggal natural seperti `Friday` disimpan sebagai teks, tidak dihitung ulang
+menjadi tanggal kalender. Penolakan eksplisit seperti `Do not add a task ...`
+tidak menjalankan tindakan.
+
 Daftar bisa kosong. Routing tugas pernah berhasil pada evaluasi lokal, tetapi
 variasi kalimat dan perilaku di Pi tetap perlu diuji. Sapaan seperti `hello`
 belum berarti tersedia chatbot percakapan umum dengan respons LLM.

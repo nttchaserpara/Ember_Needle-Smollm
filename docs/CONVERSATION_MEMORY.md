@@ -645,3 +645,30 @@ for suite in community original transfer; do
     --output "$HOME/emberos-baseline/ir-community-$suite.json" || break
 done
 ```
+
+### English task slots and negation
+
+An 11-request English fixture now covers task titles, explicit due dates and
+priorities, numbered task IDs, and requests that explicitly negate task actions.
+The slot parser preserves supported date phrases as text; it does not convert
+`Friday` or `tomorrow` into a calendar date. Negated task commands return before
+the model can select or execute a task tool.
+
+The evaluator replaces tool execution with a recorder, so these results measure
+routing and arguments only; no task is added, completed, or removed. A local
+Linux run compared baseline `e8228ac` with the current worktree:
+
+| Revision | Expected routes and arguments | Unexpected actions | Failed valid requests |
+| --- | ---: | ---: | ---: |
+| Baseline | 4/11 | 1 | 6 |
+| Updated | 11/11 | 0 | 0 |
+
+To measure the same fixture, including process RSS, available system RAM, swap,
+and elapsed time, on the Pi after pulling the update:
+
+```sh
+./venv/bin/python scripts/benchmark_nlp_slots.py --output ~/emberos-baseline/nlp-slots.json
+```
+
+The benchmark archives `e8228ac` from Git and runs that snapshot plus the current
+checkout with the same evaluator. The physical Pi result is still pending.

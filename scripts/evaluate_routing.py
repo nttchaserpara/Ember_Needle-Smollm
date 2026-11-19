@@ -66,6 +66,8 @@ def main():
                 passed = False
         if "expected_route" in case:
             passed = passed and response.get("route") == case["expected_route"]
+        if "expected_reason" in case:
+            passed = passed and response.get("reason") == case["expected_reason"]
         results.append({**case, "passed": passed, "calls": calls, "response": response,
                         "model_inputs": model_inputs, "raw_model_results": raw_results,
                         "routing_diagnostics": diagnostics,
