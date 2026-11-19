@@ -742,15 +742,23 @@ unsupported actions, and abstained without the expected clarification for two
 other invalid inputs. The current worktree matched 9/9; the task-slot,
 ambiguous-task and file-action regression suites also remained green.
 
-The Pi comparison is pending. Run it after pulling the update:
+The Pi Zero 2 W ran the nine-case fixture once at `dbaf02b` and once at
+`ffb943c`. The updated guard eliminated all three unsupported tool proposals,
+but one valid request still failed on the device. The local evaluator passed
+all nine, so the failing Pi case should be inspected before claiming full numeric
+slot coverage.
 
-```sh
-./venv/bin/python scripts/benchmark_nlp_slots.py --baseline dbaf02b \
-  --cases scripts/fixtures/nlp_numeric_slots_en.json \
-  --output ~/emberos-baseline/nlp-numeric-slots.json
-```
+| Pi revision | Expected routes and arguments | Unexpected actions | Failed valid requests |
+| --- | ---: | ---: | ---: |
+| `dbaf02b` | 3/9 | 3 | 1 |
+| `ffb943c` | 8/9 | 0 | 1 |
+
+| Pi revision | Sampled peak process tree RSS | Minimum system RAM available | Swap delta | Full evaluator | Child processes remaining |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `dbaf02b` | 60.32 MiB | 239.06 MiB | +0 MiB | 265.003 s | none |
+| `ffb943c` | 54.24 MiB | 244.36 MiB | +0 MiB | 65.547 s | none |
 
 The evaluator substitutes a recorder for tool execution; it will not change
 volume or brightness. This benchmark records process RSS, system RAM available,
 swap, duration and child-process cleanup, but not inference context or thread
-counts.
+counts. These are single runs.
